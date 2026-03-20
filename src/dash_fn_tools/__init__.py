@@ -1,9 +1,9 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""dash-fn-form — introspect a typed callable into a Dash form."""
+"""dash-fn-tools — introspect a typed callable into a Dash form."""
 
-from dash_fn_form._config_builder import (
+from dash_fn_tools._config_builder import (
     Config,
     FieldHook,
     FromComponent,

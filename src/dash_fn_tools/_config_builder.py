@@ -361,7 +361,7 @@ def _normalize_overrides(overrides: dict) -> dict:
 
 def field_id(config_id: str, name: str) -> str:
     """Return the Dash component ID for a field by name."""
-    return f"_fnform_field_{config_id}_{name}"
+    return f"_dft_field_{config_id}_{name}"
 
 
 def _field_id(config_id: str, field: _Field) -> str:
@@ -369,7 +369,7 @@ def _field_id(config_id: str, field: _Field) -> str:
 
 
 def _time_field_id(config_id: str, field: _Field) -> str:
-    return f"_fnform_field_{config_id}_{field.name}_time"
+    return f"_dft_field_{config_id}_{field.name}_time"
 
 
 def _infer_type(annotation: Any, default: Any) -> tuple[str, tuple, bool]:

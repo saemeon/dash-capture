@@ -11,7 +11,7 @@ from typing import Any, Callable, cast
 import dash
 from dash import Input, Output, State, dcc, html
 
-from dash_fn_form import FromComponent, build_config, field_id
+from dash_fn_tools import FromComponent, build_config, field_id
 from s5ndt._ids import id_generator
 from s5ndt.dropdown import build_dropdown
 from s5ndt.wizard import build_wizard
