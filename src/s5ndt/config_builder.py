@@ -251,9 +251,9 @@ def build_config(
     """
     styles = styles or {}
     class_names = class_names or {}
-    overrides = component_overrides or {}
+    overrides = _normalize_overrides(component_overrides or {})
     fields = _get_fields(fn)
-    states = _build_states(config_id, fields)
+    states = _build_states(config_id, fields, overrides)
     div = html.Div(
         style={"display": "flex", "flexDirection": "column", "gap": "8px"},
         children=[
@@ -264,6 +264,21 @@ def build_config(
 
 
 # --- internals ---
+
+
+def _normalize_overrides(overrides: dict) -> dict:
+    """Normalize component_overrides to ``{name: (component, prop)}`` pairs.
+
+    Accepts either a bare ``Component`` (defaults to ``"value"``) or an explicit
+    ``(Component, prop)`` tuple for components that expose a different property.
+    """
+    result = {}
+    for name, entry in overrides.items():
+        if isinstance(entry, tuple):
+            result[name] = entry  # (component, prop) already
+        else:
+            result[name] = (entry, "value")
+    return result
 
 
 def _field_id(config_id: str, field: _Field) -> str:
@@ -345,17 +360,28 @@ def _get_fields(fn: Callable) -> list[_Field]:
     return fields
 
 
-def _build_states(config_id: str, fields: list[_Field]) -> list[State]:
-    """Build the State list. datetime emits two States (date + time)."""
+def _build_states(
+    config_id: str, fields: list[_Field], overrides: dict | None = None
+) -> list[State]:
+    """Build the State list. datetime emits two States (date + time).
+
+    When a field has a component override with an explicit prop, that prop
+    is used instead of the type-derived default.
+    """
+    overrides = overrides or {}
     states = []
     for f in fields:
-        if f.type == "datetime":
-            states.append(State(_field_id(config_id, f), "date"))
+        fid = _field_id(config_id, f)
+        if f.name in overrides:
+            _, prop = overrides[f.name]
+            states.append(State(fid, prop))
+        elif f.type == "datetime":
+            states.append(State(fid, "date"))
             states.append(State(_time_field_id(config_id, f), "value"))
         elif f.type == "date":
-            states.append(State(_field_id(config_id, f), "date"))
+            states.append(State(fid, "date"))
         else:
-            states.append(State(_field_id(config_id, f), "value"))
+            states.append(State(fid, "value"))
     return states
 
 
@@ -372,7 +398,7 @@ def _build_field(
     )
 
     if field.name in overrides:
-        comp = copy.copy(overrides[field.name])
+        comp = copy.copy(overrides[field.name][0])
         comp.id = fid
         return html.Div([label, comp])
 

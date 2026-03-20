@@ -293,8 +293,9 @@ def graph_exporter(
     styles :
         Dict mapping slot names to CSS-property dicts. Slots:
         ``"dialog"`` (modal container), ``"title"`` (header title),
-        ``"close"`` (✕ button), ``"button"`` (Generate/Download/Reset
-        buttons), ``"label"`` (field labels), and all Python type slots
+        ``"close"`` (✕ button), ``"button"`` (Generate/Download/Reset/···
+        buttons), ``"panel"`` (··· dropdown panel), ``"label"`` (field
+        labels), and all Python type slots
         (``"str"``, ``"int"``, ``"float"``, ``"bool"``, ``"date"``,
         ``"datetime"``, ``"literal"``, ``"list"``, ``"tuple"``).
         Example: ``{"dialog": {"borderRadius": "8px"},
@@ -355,6 +356,8 @@ def graph_exporter(
         menu_id,
         trigger_label="···",
         close_inputs=[Input(restore_id, "n_clicks")],
+        styles=_styles,
+        class_names=_class_names,
         children=[
             html.Button(
                 "Reset to defaults",
@@ -367,6 +370,11 @@ def graph_exporter(
                 options=[{"label": " Auto-generate", "value": "auto"}],
                 value=[],
                 style={"padding": "4px 8px"},
+                labelStyle={
+                    k: v
+                    for k, v in (_styles.get("label") or {}).items()
+                    if k == "color"
+                },
             ),
         ],
     )

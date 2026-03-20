@@ -14,6 +14,8 @@ def build_dropdown(
     children: Any,
     trigger_label: str = "···",
     close_inputs: list[Input] | None = None,
+    styles: dict | None = None,
+    class_names: dict | None = None,
 ) -> html.Div:
     """A generic toggle dropdown anchored to a trigger button.
 
@@ -28,6 +30,12 @@ def build_dropdown(
     close_inputs :
         Additional :class:`dash.Input` objects that close the dropdown
         (e.g. a reset button click).
+    styles :
+        Dict mapping slot names to CSS-property dicts. Slots:
+        ``"button"`` → trigger button, ``"panel"`` → dropdown panel
+        (inherits theming keys from ``"dialog"`` if present).
+    class_names :
+        Dict mapping the same slot names to CSS class name strings.
 
     Returns
     -------
@@ -38,16 +46,30 @@ def build_dropdown(
     panel_id = f"_s5ndt_dd_panel_{dropdown_id}"
     overlay_id = f"_s5ndt_dd_overlay_{dropdown_id}"
 
-    _panel_hidden = {
-        "display": "none",
+    _styles = styles or {}
+    _class_names = class_names or {}
+
+    # Inherit safe theming properties from "dialog" (background, color,
+    # borderRadius, boxShadow, border) then let "panel" override further.
+    # Layout-only keys (minWidth, padding, gap, …) are intentionally excluded
+    # to avoid bleeding modal layout onto a small context menu.
+    _theme_keys = {"background", "color", "borderRadius", "boxShadow", "border"}
+    _dialog_theme = {
+        k: v for k, v in (_styles.get("dialog") or {}).items() if k in _theme_keys
+    }
+    _panel_base = {
         "position": "absolute",
         "right": "0",
         "background": "white",
         "border": "1px solid #ccc",
         "zIndex": 100,
         "whiteSpace": "nowrap",
+        **_dialog_theme,
+        **(_styles.get("panel") or {}),
     }
-    _panel_visible = {**_panel_hidden, "display": "block"}
+    _panel_hidden = {"display": "none", **_panel_base}
+    _panel_visible = {"display": "block", **_panel_base}
+
     _overlay_hidden = {
         "display": "none",
         "position": "fixed",
@@ -79,15 +101,17 @@ def build_dropdown(
     return html.Div(
         style={"position": "relative", "display": "inline-block"},
         children=[
-            html.Button(trigger_label, id=trigger_id),
-            html.Div(
-                id=overlay_id,
-                n_clicks=0,
-                style=_overlay_hidden,
+            html.Button(
+                trigger_label,
+                id=trigger_id,
+                style=_styles.get("button"),
+                className=_class_names.get("button", ""),
             ),
+            html.Div(id=overlay_id, n_clicks=0, style=_overlay_hidden),
             html.Div(
                 id=panel_id,
                 style=_panel_hidden,
+                className=_class_names.get("panel", ""),
                 children=children,
             ),
         ],
