@@ -2,10 +2,13 @@
 # Distributed under the terms of the MIT License.
 
 
+from importlib.metadata import PackageNotFoundError, version
+
 try:
-    from ._version import __version__
-except ImportError:
+    __version__ = version("mypackage")
+except PackageNotFoundError:
     __version__ = "unknown"
+
 
 from dash_fn_tools import FieldHook, FieldSpec, FromComponent, build_config
 from s5ndt._ids import id_generator
@@ -14,14 +17,14 @@ from s5ndt.fig_export import FromPlotly, graph_exporter
 from s5ndt.wizard import Wizard, build_wizard
 
 __all__ = [
-    "id_generator",
-    "build_config",
-    "build_dropdown",
-    "build_wizard",
-    "graph_exporter",
     "FieldHook",
     "FieldSpec",
     "FromComponent",
     "FromPlotly",
     "Wizard",
+    "build_config",
+    "build_dropdown",
+    "build_wizard",
+    "graph_exporter",
+    "id_generator",
 ]

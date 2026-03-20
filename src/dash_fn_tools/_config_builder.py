@@ -7,12 +7,12 @@ import copy
 import inspect
 import types
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import (
     Annotated,
     Any,
-    Callable,
     Literal,
     Union,
     get_args,
@@ -115,7 +115,7 @@ class Config:
 
             state_map = {
                 (s.component_id, s.component_property): v
-                for s, v in zip(hook_states, hook_state_values)
+                for s, v in zip(hook_states, hook_state_values, strict=False)
             }
 
             results: list[Any] = []
@@ -193,7 +193,7 @@ class Config:
         def restore_all(n_clicks, *hook_state_values):
             state_map = {
                 (s.component_id, s.component_property): v
-                for s, v in zip(hook_states, hook_state_values)
+                for s, v in zip(hook_states, hook_state_values, strict=False)
             }
             results: list[Any] = []
             for f in fields:
@@ -664,7 +664,7 @@ def _coerce(f: _Field, value: Any) -> Any:
         if f.type == "tuple":
             parts = [x.strip() for x in value.split(",")]
             if f.args:
-                return tuple(t(v) for t, v in zip(f.args, parts))
+                return tuple(t(v) for t, v in zip(f.args, parts, strict=False))
             return tuple(parts)
     except (ValueError, TypeError):
         return f.default

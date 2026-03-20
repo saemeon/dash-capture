@@ -6,7 +6,8 @@ from __future__ import annotations
 import base64
 import inspect
 import io
-from typing import Any, Callable, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import dash
 from dash import Input, Output, State, dcc, html
@@ -117,7 +118,7 @@ def _build_capture_js(
     strip_patches: list[str],
     params,
 ) -> str:
-    js_args = ", ".join(["n_clicks", "n_intervals"] + active_capture)
+    js_args = ", ".join(["n_clicks", "n_intervals", *active_capture])
     js_build_opts = "\n                ".join(
         f"if ({p} != null) opts.{p[len('capture_') :]} = {p};" for p in active_capture
     )

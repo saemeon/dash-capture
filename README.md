@@ -33,6 +33,21 @@ pip install s5ndt
 
 **Supported field types:** `str`, `int`, `float`, `bool`, `date`, `datetime`, `Literal[...]`, `list[T]`, `tuple[T, ...]`, `T | None`
 
+# How to Track Template Changes
+
+1. Add the remote
+run `git remote add template https://github.com/saemeon/pytemplate.git`
+
+2. Fetch the data
+run `git fetch template`
+
+3. Create a local branch that tracks the template's main
+run `git checkout -b pytemplate-main template/main`
+
+4. Switch back to your work branch and merge the template in
+run `git checkout main`
+run `git merge pytemplate-main --allow-unrelated-histories`
+
 ## License
 
 MIT
