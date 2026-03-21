@@ -11,12 +11,15 @@ from typing import Any
 from dash import Input, Output, State, callback, dcc, html
 
 from dash_fn_interact._forms import FnForm
+from dash_fn_interact._renderers import register_renderer, to_component
 
 
 def interact(
     fn: Callable | None = None,
     *,
     _manual: bool = False,
+    _loading: bool = True,
+    _render: Callable[[Any], Any] | None = None,
     **kwargs: Any,
 ) -> html.Div | Callable:
     """Build a self-contained interactive panel from a typed callable.
@@ -44,6 +47,27 @@ def interact(
         ``False`` (default) — callback fires on every field change (live
         update).  ``True`` — an *Apply* button is added; callback fires on
         click only.
+    _loading :
+        ``True`` (default) — wraps the output area in ``dcc.Loading`` so a
+        spinner is shown while the callback runs.  Set to ``False`` to
+        disable (e.g. for very fast functions where the flash is distracting).
+    _render :
+        Optional converter applied to the return value of *fn* before it is
+        displayed.  Receives the raw Python result and must return a Dash
+        component.  Use this when *fn* returns a type the built-in converter
+        doesn't handle (e.g. a ``pandas.DataFrame``, a custom object)::
+
+            interact(
+                get_data,
+                _render=lambda df: dash_table.DataTable(
+                    data=df.to_dict("records"),
+                    columns=[{"name": c, "id": c} for c in df.columns],
+                ),
+            )
+
+        When ``None`` (default), the built-in converter is used:
+        ``go.Figure`` → ``dcc.Graph``, Dash components → as-is,
+        anything else → ``html.Pre(repr(...))``.
     **kwargs :
         Per-field shorthands passed directly to :func:`FnForm` — same
         syntax as ``FnForm`` keyword arguments (``Field``, tuples,
@@ -85,11 +109,30 @@ def interact(
             ...
 
         app.layout = html.Div([make_wave])
+
+    Custom renderer for a DataFrame-returning function::
+
+        import pandas as pd
+        from dash import dash_table
+
+        def get_data(n: int = 10) -> pd.DataFrame:
+            return pd.DataFrame({"x": range(n), "y": range(n)})
+
+        panel = interact(
+            get_data,
+            _render=lambda df: dash_table.DataTable(
+                data=df.to_dict("records"),
+                columns=[{"name": c, "id": c} for c in df.columns],
+            ),
+        )
     """
     if fn is None:
         # Called as @interact(...) with kwargs — return a decorator
         def decorator(f: Callable) -> html.Div:
-            return interact(f, _manual=_manual, **kwargs)
+            return interact(
+                f, _manual=_manual, _loading=_loading, _render=_render, **kwargs
+            )
+
         return decorator
 
     config_id = fn.__name__
@@ -97,7 +140,8 @@ def interact(
 
     cfg: FnForm = FnForm(config_id, fn, **kwargs)
 
-    output_div = html.Div(id=output_id, style={"marginTop": "16px"})
+    _inner = html.Div(id=output_id, style={"marginTop": "16px"})
+    output_div = dcc.Loading(_inner, type="circle") if _loading else _inner
 
     if _manual:
         btn_id = f"_dft_interact_btn_{config_id}"
@@ -125,7 +169,14 @@ def interact(
             prevent_initial_call=True,
         )
         def _on_apply(_n: int, *values: Any) -> Any:
-            return _render(fn, cfg.build_kwargs(values))
+            try:
+                result = fn(**cfg.build_kwargs(values))
+            except Exception as exc:
+                return html.Pre(
+                    f"Error: {exc}",
+                    style={"color": "#d9534f", "fontFamily": "monospace"},
+                )
+            return to_component(result, _render)
 
     else:
         cfg_states: list[State] = object.__getattribute__(cfg, "states")
@@ -134,39 +185,13 @@ def interact(
 
         @callback(Output(output_id, "children"), *inputs)
         def _on_change(*values: Any) -> Any:
-            return _render(fn, cfg.build_kwargs(values))
+            try:
+                result = fn(**cfg.build_kwargs(values))
+            except Exception as exc:
+                return html.Pre(
+                    f"Error: {exc}",
+                    style={"color": "#d9534f", "fontFamily": "monospace"},
+                )
+            return to_component(result, _render)
 
     return panel
-
-
-def _render(fn: Callable, kwargs: dict) -> Any:
-    """Call fn(**kwargs) and convert the result to Dash-renderable children."""
-    try:
-        result = fn(**kwargs)
-    except Exception as exc:
-        return html.Pre(
-            f"Error: {exc}",
-            style={"color": "#d9534f", "fontFamily": "monospace"},
-        )
-
-    if result is None:
-        return None
-
-    # Plotly Figure → dcc.Graph
-    try:
-        import plotly.graph_objects as go  # noqa: PLC0415
-
-        if isinstance(result, go.Figure):
-            return dcc.Graph(figure=result)
-    except ImportError:
-        pass
-
-    # Dash component → as-is
-    if hasattr(result, "_type"):
-        return result
-
-    # Anything else → repr
-    return html.Pre(
-        repr(result),
-        style={"fontFamily": "monospace", "whiteSpace": "pre-wrap"},
-    )

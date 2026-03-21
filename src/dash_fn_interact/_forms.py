@@ -8,6 +8,7 @@ import inspect
 import json
 import pathlib
 import re
+import sys
 import types
 import warnings
 from collections.abc import Callable
@@ -31,9 +32,14 @@ from dash import Input, Output, State, dcc, html
 from dash_fn_interact._spec import Field, FieldHook, _FieldFixed
 
 _CONSTRAINT_ATTRS: list[tuple[str, str]] = [
-    ("ge", "min"), ("le", "max"), ("gt", "min"), ("lt", "max"),
-    ("multiple_of", "step"), ("min_length", "min_length"),
-    ("max_length", "max_length"), ("pattern", "pattern"),
+    ("ge", "min"),
+    ("le", "max"),
+    ("gt", "min"),
+    ("lt", "max"),
+    ("multiple_of", "step"),
+    ("min_length", "min_length"),
+    ("max_length", "max_length"),
+    ("pattern", "pattern"),
 ]
 
 
@@ -44,26 +50,22 @@ def _read_constraint_meta(meta: Any) -> dict[str, Any]:
     ``step``, ``min_length``, ``max_length``, ``pattern``).  Empty dict if *meta* is
     neither a recognised type.
 
-    Imports are done lazily so they pick up packages installed after module load.
+    Uses ``sys.modules`` checks so neither pydantic nor annotated_types is imported
+    solely for the type check — if they are not already loaded, no object of their
+    type can exist in the annotation metadata.
     """
     items: list[Any] = []
 
-    try:
-        from pydantic.fields import FieldInfo as _PydanticFieldInfo  # noqa: PLC0415
-        if isinstance(meta, _PydanticFieldInfo):
-            # Pydantic v2: constraints are stored as annotated_types objects in .metadata
+    # Pydantic v2 FieldInfo: constraints live in .metadata as annotated_types objects
+    if "pydantic.fields" in sys.modules:
+        if isinstance(meta, sys.modules["pydantic.fields"].FieldInfo):
             items = getattr(meta, "metadata", [])
-    except ImportError:
-        pass
 
-    if not items:
-        try:
-            import annotated_types as _at  # noqa: PLC0415
-            if isinstance(meta, _at.BaseMetadata):
-                # annotated_types used directly (e.g. Annotated[int, Ge(0), Le(100)])
-                items = [meta]
-        except ImportError:
-            pass
+    # annotated_types used directly (e.g. Annotated[int, Ge(0), Le(100)])
+    if not items and "annotated_types" in sys.modules:
+        _at = sys.modules["annotated_types"]
+        if isinstance(meta, _at.BaseMetadata):
+            items = [meta]
 
     if not items:
         return {}
@@ -78,8 +80,6 @@ def _read_constraint_meta(meta: Any) -> dict[str, Any]:
 
 
 _registered_config_ids: set[str] = set()
-
-
 
 
 class FieldRef:
@@ -134,8 +134,6 @@ class FieldRef:
         return hash(self._component_id)
 
 
-
-
 @dataclass
 class _Field:
     name: str
@@ -145,8 +143,6 @@ class _Field:
     optional: bool = False
     spec: Field | None = field(default=None, repr=False)
     # spec is None until _resolve_spec is called in Config.__init__
-
-
 
 
 class Form(html.Div):
@@ -228,12 +224,16 @@ class Form(html.Div):
 
         field_defaults = {f.name: f.default for f in _fields}
         for f in _fields:
-            child = _build_field(config_id, f, label_style, label_class_name, field_maker)
+            child = _build_field(
+                config_id, f, label_style, label_class_name, field_maker
+            )
             if f.spec and f.spec.visible:
                 other, op, val = f.spec.visible
                 show = _check_visible(field_defaults.get(other), op, val)
                 grid: dict = (
-                    {"gridColumn": f"span {f.spec.col_span}"} if f.spec.col_span > 1 else {}
+                    {"gridColumn": f"span {f.spec.col_span}"}
+                    if f.spec.col_span > 1
+                    else {}
                 )
                 vis_style = {**grid, **({} if show else {"display": "none"})}
                 child = html.Div(
@@ -819,8 +819,6 @@ class Form(html.Div):
         return fields
 
 
-
-
 class FnForm(Form):
     if TYPE_CHECKING:
         _fn: Callable
@@ -1013,8 +1011,6 @@ class FnForm(Form):
                 return str(result) if not errors else str(errors)
         """
         return self.call(self._named_to_values(raw))
-
-
 
 
 def field_id(config_id: str, name: str) -> str:
@@ -1373,8 +1369,6 @@ def _build_field(
             )
         )
     return html.Div(children, style=wrapper_style or None)
-
-
 
 
 def _coerce(f: _Field, value: Any) -> Any:
