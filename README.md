@@ -1,72 +1,134 @@
-[![PyPI](https://img.shields.io/pypi/v/dash-fn-interact)](https://pypi.org/project/dash-fn-interact/)
-[![Python](https://img.shields.io/pypi/pyversions/dash-fn-interact)](https://pypi.org/project/dash-fn-interact/)
+[![PyPI](https://img.shields.io/pypi/v/dash-interact)](https://pypi.org/project/dash-interact/)
+[![Python](https://img.shields.io/pypi/pyversions/dash-interact)](https://pypi.org/project/dash-interact/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Plotly](https://img.shields.io/badge/Plotly-3F4F75?logo=plotly&logoColor=white)](https://plotly.com/python/)
 [![Dash](https://img.shields.io/badge/Dash-008DE4?logo=plotly&logoColor=white)](https://dash.plotly.com/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
-[![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty)
-[![prek](https://img.shields.io/badge/prek-checked-blue)](https://github.com/saemeon/prek)
 
-# dash-fn-interact
+# dash-interact
 
-An introspection-based UI generator for Plotly Dash. Automatically transform type-hinted Python functions into reactive Dash forms.
+Build interactive Plotly Dash apps from type-hinted Python functions — pyplot-style, no boilerplate.
 
-**Documentation: [saemeon.github.io/dash-fn-interact](https://saemeon.github.io/dash-fn-interact/)**
+```python
+from dash_interact import page
+
+page.H1("My App")
+
+@page.interact
+def sine_wave(amplitude: float = 1.0, frequency: float = 2.0, n_cycles: int = 3):
+    import numpy as np, plotly.graph_objects as go
+    x = np.linspace(0, n_cycles * 2 * np.pi, 600)
+    return go.Figure(go.Scatter(x=x, y=amplitude * np.sin(frequency * x)))
+
+page.run(debug=True)
+```
 
 ## Installation
 
 ```bash
-pip install dash-fn-interact
+pip install dash-interact
 ```
+
+## How it works
+
+`@page.interact` inspects the function signature and generates a Dash form automatically:
+
+- `float` / `int` → slider or number input
+- `bool` → checkbox
+- `Literal[...]` → dropdown
+- `str` → text input
+- `date` / `datetime` → date picker
+
+The return value is rendered automatically — Plotly figures become `dcc.Graph`, DataFrames become a `DataTable`, strings become Markdown, and so on.
 
 ## Quickstart
 
+### Implicit (pyplot-style)
+
 ```python
-from dash import Dash, Input, Output, html
-from dash_fn_interact import build_config
+from dash_interact import page
 
-app = Dash(__name__)
+page.H1("Dashboard")
 
-def my_renderer(title: str = "Chart", dpi: int = 150, show_grid: bool = True):
+@page.interact
+def histogram(n_samples: int = 500, bins: int = 40):
+    import numpy as np, plotly.graph_objects as go
+    data = np.random.default_rng(42).normal(size=n_samples)
+    return go.Figure(go.Histogram(x=data, nbinsx=bins))
+
+page.run(debug=True)
+```
+
+### Explicit (embed into a larger layout)
+
+```python
+from dash import Dash, html
+from dash_interact import Page
+
+p = Page()
+p.H1("Dashboard")
+
+@p.interact
+def histogram(n_samples: int = 500, bins: int = 40):
     ...
 
-cfg = build_config("render", my_renderer)
+app = Dash(__name__)
+app.layout = html.Div([navbar, p, footer])
+app.run(debug=True)
+```
 
-app.layout = html.Div([
-    cfg.div,
-    html.Button("Apply", id="apply"),
-])
+### Field customization
 
-@app.callback(Output("result", "children"), Input("apply", "n_clicks"), *cfg.states)
-def on_apply(n, *values):
-    kwargs = cfg.build_kwargs(values)
-    # kwargs == {"title": "Chart", "dpi": 150, "show_grid": True}
+```python
+from dash_interact import page
+from dash_fn_interact import Field
+
+@page.interact(amplitude=(0.1, 3.0, 0.1))   # tuple → min/max/step
+def sine_wave(
+    amplitude: float = 1.0,
+    frequency: float = 2.0,
+    label: str = Field(label="Title", description="Chart title"),
+):
     ...
 ```
 
-## API
+### Custom renderers
 
-| Name | Description |
-|------|-------------|
-| `build_config(id, fn, field=FieldSpec(...), field=(min,max,step), ...)` | Introspect a callable into a `Config` |
-| `Config.div` | `html.Div` with labeled input fields — embed anywhere |
-| `Config.states` | `list[State]` to pass to a Dash callback |
-| `Config.build_kwargs(values)` | Reconstruct typed `**kwargs` from callback values |
-| `Config.register_populate_callback(input)` | Auto-fill hooked fields when a dialog opens |
-| `Config.register_restore_callback(input)` | Reset all fields to defaults |
-| `FieldSpec` | Per-field customization (label, style, component override, min/max/step, hook) |
-| `FieldHook` | Base class for runtime defaults derived from Dash state |
-| `FromComponent(component, prop)` | Built-in hook — reads another component's property as the default |
-| `field_id(config_id, name)` | Compute the Dash component ID for a field |
+```python
+import pandas as pd
+from dash import dash_table
+from dash_fn_interact import register_renderer
 
-**Supported types:** `str`, `int`, `float`, `bool`, `date`, `datetime`, `Literal[...]`, `list[T]`, `tuple[T, ...]`, `T | None`
+register_renderer(
+    pd.DataFrame,
+    lambda df: dash_table.DataTable(data=df.to_dict("records")),
+)
+
+@page.interact
+def get_data(rows: int = 10) -> pd.DataFrame:
+    ...  # returned DataFrame is rendered as a DataTable automatically
+```
+
+## Packages
+
+This repo contains two packages:
+
+| Package | Install | Description |
+|---------|---------|-------------|
+| `dash-interact` | `pip install dash-interact` | pyplot-style page API (`page`, `interact`, `Page`) |
+| `dash-fn-interact` | `pip install dash-fn-interact` | headless engine (`build_fn_panel`, `FnForm`, `Field`) |
+
+Most users should install `dash-interact` — it includes the engine.
 
 ## Credits
 
 | Feature | Inspiration |
 |---------|-------------|
-| `visible` rules (conditional field visibility) | [dash-pydantic-form](https://github.com/RenaudLN/dash-pydantic-form) — the idea of encoding visibility conditions in a component's `id` dict and handling all visibility toggling in a single clientside callback via pattern matching (`ALL`/`MATCH`) comes directly from their implementation. |
+| `interact()` | [ipywidgets](https://ipywidgets.readthedocs.io/) — derive controls from a function signature |
+| `page` singleton | [matplotlib.pyplot](https://matplotlib.org/stable/api/pyplot_summary.html) — implicit module-level state |
+| top-to-bottom authoring | [Streamlit](https://streamlit.io/) / [Shiny Express](https://shiny.posit.co/py/docs/express.html) |
+| visibility rules | [dash-pydantic-form](https://github.com/RenaudLN/dash-pydantic-form) |
 
 ## License
 

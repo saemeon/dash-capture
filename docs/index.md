@@ -1,176 +1,146 @@
-# dash-fn-interact
+# dash-interact
 
-An introspection-based UI generator for Plotly Dash. Automatically transform type-hinted Python functions into reactive Dash forms.
+Build interactive Plotly Dash apps from type-hinted Python functions — pyplot-style, no boilerplate.
 
 ## Installation
 
 ```bash
-pip install dash-fn-interact
+pip install dash-interact
 ```
-
-## How it works
-
-`build_config` inspects a function's signature and generates a matching Dash form. Parameters whose names start with `_` are skipped — use this convention to pass internal data (figure JSON, file handles, etc.) without exposing them to the user.
-
-The result is a `Config` object with three things you need:
-
-- **`.div`** — an `html.Div` with labeled inputs, ready to embed anywhere in your layout
-- **`.states`** — a `list[State]` to include in your callback decorator
-- **`.build_kwargs(values)`** — converts raw callback values back to typed Python kwargs
 
 ## Quickstart
 
 ```python
-from dash import Dash, Input, Output, html
-from dash_fn_interact import build_config
+from dash_interact import page
 
-app = Dash(__name__)
+page.H1("My App")
 
-def my_renderer(title: str = "Chart", dpi: int = 150, show_grid: bool = True):
-    """Render a matplotlib figure."""
-    ...
+@page.interact
+def sine_wave(amplitude: float = 1.0, frequency: float = 2.0, n_cycles: int = 3):
+    import numpy as np, plotly.graph_objects as go
+    x = np.linspace(0, n_cycles * 2 * np.pi, 600)
+    return go.Figure(go.Scatter(x=x, y=amplitude * np.sin(frequency * x)))
 
-cfg = build_config("render", my_renderer)
-
-app.layout = html.Div([
-    cfg.div,
-    html.Button("Apply", id="apply"),
-    html.Div(id="result"),
-])
-
-@app.callback(Output("result", "children"), Input("apply", "n_clicks"), *cfg.states)
-def on_apply(n, *values):
-    if not n:
-        return ""
-    kwargs = cfg.build_kwargs(values)
-    # {"title": "Chart", "dpi": 150, "show_grid": True}
-    my_renderer(**kwargs)
-    return "Done"
-
-if __name__ == "__main__":
-    app.run(debug=True)
+page.run(debug=True)
 ```
+
+`@page.interact` inspects the function signature and builds the form. The return value is rendered automatically.
 
 ## Type mapping
 
-Each parameter type maps to a specific Dash component:
-
-| Python type | Dash component |
+| Python type | Control |
 |---|---|
-| `str` | `dcc.Input(type="text")` |
-| `int` | `dcc.Input(type="number", step=1)` |
-| `float` | `dcc.Input(type="number", step="any")` |
-| `bool` | `dcc.Checklist` |
-| `date` | `dcc.DatePickerSingle` |
-| `datetime` | `dcc.DatePickerSingle` + `dcc.Input` (HH:MM) |
-| `Literal[A, B, C]` | `dcc.Dropdown` |
-| `list[T]` / `tuple[T, ...]` | `dcc.Input(type="text")` — comma-separated |
-| `T \| None` / `Optional[T]` | same as `T`, submits `None` when empty |
+| `float` | Number input (or slider with `(min, max, step)`) |
+| `int` | Number input (integer step) |
+| `bool` | Checkbox |
+| `Literal[A, B, C]` | Dropdown |
+| `str` | Text input |
+| `date` / `datetime` | Date picker |
+| `list[T]` / `tuple[T, ...]` | Comma-separated text input |
+| `T \| None` | Same as `T`, submits `None` when empty |
 
-## Customization
+## The page API
 
-### Per-field: `FieldSpec`
-
-Pass a `FieldSpec` in the `field_specs` dict or embed it directly in the type annotation:
+`page` works like `matplotlib.pyplot` — a module-level singleton that accumulates content as you go.
 
 ```python
-from typing import Annotated
-from dash_fn_interact import build_config, FieldSpec
+from dash_interact import page
 
-def my_fn(
-    name: Annotated[str, FieldSpec(label="Full name", col_span=2)],
-    dpi: int = 150,
-):
+page.H1("Title")          # adds html.H1 to the current page
+page.Hr()                 # adds html.Hr
+@page.interact            # adds an interact panel
+def my_fn(...): ...
+page.run()                # builds the Dash app and starts the server
+page.current()            # returns the Page instance (for embedding)
+```
+
+Any `html.*` element is available as `page.<TagName>(...)`.
+
+## Explicit Page object
+
+```python
+from dash_interact import Page
+from dash import Dash, html
+
+p = Page(max_width=1200, manual=True)
+p.H1("My App")
+
+@p.interact
+def my_fn(...): ...
+
+app = Dash(__name__)
+app.layout = html.Div([navbar, p, footer])
+app.run()
+```
+
+`Page` is a subclass of `html.Div` — use it anywhere a Dash component is accepted.
+
+## Field customization
+
+```python
+from dash_fn_interact import Field
+
+@page.interact(
+    amplitude=(0.1, 3.0, 0.1),                    # tuple → min/max/step
+    label=Field(label="Title", col_span=2),        # Field → full control
+)
+def my_fn(amplitude: float = 1.0, label: str = "Chart"):
     ...
-
-cfg = build_config("ex", my_fn, cols=2)
 ```
 
-Or pass it externally (useful for functions you don't own):
+`Field` options:
 
-```python
-cfg = build_config("ex", my_fn, field_specs={
-    "dpi": FieldSpec(min=72, max=600, step=1, description="Output resolution"),
-})
-```
-
-Key `FieldSpec` options:
-
-| Field | Description |
+| Option | Description |
 |---|---|
-| `label` | Override the auto-generated label |
+| `label` | Display label (default: parameter name) |
 | `description` | Help text below the input |
+| `min` / `max` / `step` | Numeric bounds |
 | `col_span` | Column span in a multi-column grid |
-| `style` | CSS dict for the input component |
-| `class_name` | CSS class for the input component |
-| `component` | Replace the component entirely |
-| `component_prop` | Property to read from a custom component (default `"value"`) |
-| `min` / `max` / `step` | Numeric constraints (int/float only) |
-| `hook` | `FieldHook` for runtime defaults |
+| `component` | Replace the auto-generated Dash component entirely |
+| `hook` | `FieldHook` for runtime-populated defaults |
 
-### Type-level styling
+## Custom renderers
 
-Apply CSS to all fields of a given type:
+Register a renderer once at startup — all `interact()` calls that return that type use it automatically:
 
 ```python
-cfg = build_config("ex", my_fn, styles={
-    "int": {"width": "80px"},
-    "str": {"width": "200px"},
-    "label": {"fontWeight": "600"},
-})
+import pandas as pd
+from dash import dash_table
+from dash_fn_interact import register_renderer
+
+register_renderer(
+    pd.DataFrame,
+    lambda df: dash_table.DataTable(
+        data=df.to_dict("records"),
+        columns=[{"name": c, "id": c} for c in df.columns],
+    ),
+)
 ```
 
-Valid keys: `"str"`, `"int"`, `"float"`, `"bool"`, `"date"`, `"datetime"`, `"literal"`, `"list"`, `"tuple"`, `"label"`.
+Built-in renderers (checked in order):
 
-### Runtime defaults: `FieldHook`
+1. Explicit `_render=` on `interact()`
+2. Global registry (`register_renderer`)
+3. `plotly.graph_objects.Figure` → `dcc.Graph`
+4. Dash component → as-is
+5. `str` → `dcc.Markdown`
+6. `int` / `float` / `bool` → `html.P`
+7. `pandas.DataFrame` → `DataTable`
+8. `matplotlib.figure.Figure` → base64 PNG image
+9. Fallback → `html.Pre(repr(result))`
 
-Use a `FieldHook` to populate a field from live Dash state when a dialog opens:
+## API Reference
 
-```python
-from dash_fn_interact import build_config, FieldSpec, FromComponent
+### page
 
-graph = dcc.Graph(id="my-graph", figure=...)
+::: dash_interact.page.current
 
-def my_renderer(title: str = ""):
-    ...
+::: dash_interact.page.interact
 
-cfg = build_config("render", my_renderer, field_specs={
-    "title": FieldSpec(hook=FromComponent(graph, "figure")),
-})
+::: dash_interact.page.add
 
-# Wire the populate callback (fires when a modal opens):
-cfg.register_populate_callback(Input("modal", "is_open"))
-```
+::: dash_interact.page.run
 
-`FromComponent(component, prop)` reads `component.prop` as the initial field value. The field is only populated when currently empty — existing user input is preserved.
+### Page
 
-Implement `FieldHook` yourself to pull defaults from any source:
-
-```python
-from dash_fn_interact import FieldHook
-from dash import State
-
-class FromStore(FieldHook):
-    def required_states(self):
-        return [State("my-store", "data")]
-
-    def get_default(self, data):
-        return (data or {}).get("title", "")
-```
-
-### Reset to defaults
-
-Register a restore callback to reset all fields when a button is clicked:
-
-```python
-cfg.register_restore_callback(Input("reset-btn", "n_clicks"))
-```
-
-Non-hooked fields revert to their static defaults; hooked fields call `hook.get_default()` again.
-
-## Multi-column grid
-
-```python
-cfg = build_config("ex", my_fn, cols=3)
-# use FieldSpec(col_span=3) on a field to span the full width
-```
+::: dash_interact.page.Page

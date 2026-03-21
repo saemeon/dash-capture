@@ -1,16 +1,16 @@
-site_name: dash-fn-interact
-site_description: Introspection-based UI generator for Plotly Dash
+site_name: dash-interact
+site_description: Build interactive Plotly Dash apps from type-hinted Python functions
 site_author: Simon Niederberger
-site_url: https://saemeon.github.io/dash-fn-interact/
+site_url: https://saemeon.github.io/dash-interact/
 
-repo_url: https://github.com/saemeon/dash-fn-interact
-repo_name: saemeon/dash-fn-interact
+repo_url: https://github.com/saemeon/dash-interact
+repo_name: saemeon/dash-interact
 
 copyright: "Copyright &copy; 2026 Simon Niederberger"
 
 nav:
-  - Overview: "index.md"
-  - API: "api.md"
+  - dash-interact: "index.md"
+  - dash-fn-interact: "fn-interact.md"
 
 theme:
   name: material
@@ -86,7 +86,7 @@ plugins:
       handlers:
         python:
           # where to look for python modules. not strictly required, but helps, if building from an arbitrary folder
-          paths: [src]
+          paths: [packages/dash-interact/src, packages/dash-fn-interact/src]
           options:
             docstring_style: numpy
             docstring_section_style: spacy
@@ -119,7 +119,7 @@ extra_css:
   - assets/extra.css
 
 watch:
-  - src
+  - packages
 
 remote_branch: documentation
 
@@ -130,4 +130,4 @@ extra:
     default: latest
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/saemeon/dash-fn-interact
+      link: https://github.com/saemeon/dash-interact
