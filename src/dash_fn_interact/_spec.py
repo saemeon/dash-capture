@@ -1,12 +1,12 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""Public types: FieldHook, FromComponent, FieldSpec."""
+"""Public types: FieldHook, FromComponent, Field."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from dash import State
@@ -59,25 +59,25 @@ class FromComponent(FieldHook):
         return state_values[0] if state_values else None
 
 
-# --- FieldSpec ---
+# --- Field ---
 
 
 @dataclass
-class FieldSpec:
+class Field:
     """Per-field configuration for :func:`~dash_fn_interact.build_config`.
 
     Can be supplied in three ways (highest priority wins):
 
-    1. **In-signature** via ``Annotated[T, FieldSpec(...)]`` — for functions
+    1. **In-signature** via ``Annotated[T, Field(...)]`` — for functions
        you own.
-    2. **External** via ``field_specs={"name": FieldSpec(...)}`` on
+    2. **External** via keyword argument on
        :func:`~dash_fn_interact.build_config` — for functions you don't own.
-    3. Type-level ``styles`` / ``class_names`` dicts on
+    3. Type-level ``_styles`` / ``_class_names`` dicts on
        :func:`~dash_fn_interact.build_config` fill in any visual properties
        not set by the above.
 
-    A :class:`FieldHook` instance may also be passed directly as a
-    ``field_specs`` value and is treated as ``FieldSpec(hook=hook)``.
+    A :class:`FieldHook` instance may also be passed directly as a kwarg
+    and is treated as ``Field(hook=hook)``.
     """
 
     # --- label / help ---
@@ -88,7 +88,7 @@ class FieldSpec:
 
     # --- layout ---
     col_span: int = 1
-    """Column span in a multi-column grid (see ``cols`` on :func:`build_config`)."""
+    """Column span in a multi-column grid (see ``_cols`` on :func:`build_config`)."""
 
     # --- styling ---
     style: dict | None = None
@@ -104,11 +104,35 @@ class FieldSpec:
 
     # --- numeric constraints (int / float only) ---
     min: float | None = None
-    """Minimum value. Only applied to ``int`` / ``float`` fields."""
+    """Minimum value (inclusive). Only applied to ``int`` / ``float`` fields."""
     max: float | None = None
-    """Maximum value. Only applied to ``int`` / ``float`` fields."""
+    """Maximum value (inclusive). Only applied to ``int`` / ``float`` fields."""
     step: float | int | str | None = None
     """Step size. Only applied to ``int`` / ``float`` fields."""
+
+    # pydantic-style aliases — resolved in __post_init__, canonical names win
+    ge: float | None = field(default=None, repr=False)
+    """Alias for ``min`` (greater-than-or-equal). Ignored if ``min`` is set."""
+    le: float | None = field(default=None, repr=False)
+    """Alias for ``max`` (less-than-or-equal). Ignored if ``max`` is set."""
+    gt: float | None = field(default=None, repr=False)
+    """Alias for ``min`` (greater-than, exclusive semantics not enforced by widget).
+    Ignored if ``min`` is set."""
+    lt: float | None = field(default=None, repr=False)
+    """Alias for ``max`` (less-than, exclusive semantics not enforced by widget).
+    Ignored if ``max`` is set."""
+    multiple_of: float | int | None = field(default=None, repr=False)
+    """Alias for ``step``. Ignored if ``step`` is set."""
+
+    # --- string / collection constraints ---
+    min_length: int | None = None
+    """Minimum length. For ``str`` / ``path``: character count.
+    For ``list`` / ``tuple``: item count."""
+    max_length: int | None = None
+    """Maximum length. For ``str`` / ``path``: character count.
+    For ``list`` / ``tuple``: item count."""
+    pattern: str | None = None
+    """Regex the value must fully match. Only applied to ``str`` / ``path`` fields."""
 
     # --- runtime default ---
     hook: FieldHook | None = None
@@ -139,8 +163,8 @@ class FieldSpec:
 
     Example::
 
-        FieldSpec(validator=lambda v: "Must be positive" if v <= 0 else None)
-        FieldSpec(validator=lambda v: None if "@" in v else "Not a valid email")
+        Field(validator=lambda v: "Must be positive" if v <= 0 else None)
+        Field(validator=lambda v: None if "@" in v else "Not a valid email")
 
     Can also be supplied as a bare callable in ``Annotated`` metadata::
 
@@ -148,3 +172,19 @@ class FieldSpec:
 
         def fn(dpi: Annotated[int, positive] = 150): ...
     """
+
+    def __post_init__(self) -> None:
+        # Resolve pydantic-style aliases into canonical names.
+        # Canonical names always win — aliases only fill in when not set.
+        if self.min is None:
+            if self.ge is not None:
+                self.min = self.ge
+            elif self.gt is not None:
+                self.min = self.gt
+        if self.max is None:
+            if self.le is not None:
+                self.max = self.le
+            elif self.lt is not None:
+                self.max = self.lt
+        if self.step is None and self.multiple_of is not None:
+            self.step = self.multiple_of

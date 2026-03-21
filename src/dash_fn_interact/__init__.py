@@ -4,13 +4,13 @@
 """dash-fn-interact — introspect a typed callable into a Dash form."""
 
 from dash_fn_interact._config_builder import Config, FieldRef, build_config, field_id
-from dash_fn_interact._spec import FieldHook, FieldSpec, FromComponent
+from dash_fn_interact._spec import Field, FieldHook, FromComponent
 
 __all__ = [
     "Config",
+    "Field",
     "FieldHook",
     "FieldRef",
-    "FieldSpec",
     "FromComponent",
     "build_config",
     "field_id",

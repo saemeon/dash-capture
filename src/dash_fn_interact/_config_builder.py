@@ -7,6 +7,7 @@ import copy
 import inspect
 import json
 import pathlib
+import re
 import types
 import warnings
 from collections.abc import Callable
@@ -26,7 +27,7 @@ from typing import (
 import dash
 from dash import Input, Output, State, dcc, html
 
-from dash_fn_interact._spec import FieldHook, FieldSpec
+from dash_fn_interact._spec import Field, FieldHook
 
 _registered_config_ids: set[str] = set()
 
@@ -96,7 +97,7 @@ class _Field:
     default: Any
     args: tuple = ()
     optional: bool = False
-    spec: FieldSpec | None = field(default=None, repr=False)
+    spec: Field | None = field(default=None, repr=False)
     # spec is None until _resolve_spec is called in build_config
 
 
@@ -130,7 +131,7 @@ class Config(html.Div):
     def register_visibility_callbacks(self) -> None:
         """Register a clientside callback that shows/hides conditional fields.
 
-        Fields with ``FieldSpec(visible=("other_field", op, value))`` are
+        Fields with ``Field(visible=("other_field", op, value))`` are
         wrapped in a div whose ``display`` style is toggled whenever the
         controlling field changes.  Supported operators: ``==``, ``!=``,
         ``"in"``, ``"not in"``.
@@ -228,7 +229,9 @@ class Config(html.Div):
                 prop = (
                     f.spec.component_prop
                     if f.spec and f.spec.component
-                    else "date" if f.type in ("date", "datetime") else "value"
+                    else "date"
+                    if f.type in ("date", "datetime")
+                    else "value"
                 )
                 return FieldRef(field_id(config_id, name), prop)
         raise AttributeError(f"Config has no field {name!r}")
@@ -306,7 +309,7 @@ class Config(html.Div):
 
         Covers fields with built-in type validation (``str``, ``int``, ``float``,
         ``list``, ``tuple``, ``path``) and any field with a custom
-        ``FieldSpec(validator=...)``.
+        ``Field(validator=...)``.
         """
         result = []
         for f in self._fields:
@@ -498,7 +501,7 @@ def build_config(
     config_id: str,
     fn: Callable,
     *,
-    _field_specs: dict[str, FieldSpec | FieldHook] | None = None,
+    _field_specs: dict[str, Field | FieldHook] | None = None,
     _styles: dict[str, dict] | None = None,
     _class_names: dict[str, str] | None = None,
     _cols: int = 1,
@@ -506,7 +509,7 @@ def build_config(
     _exclude: list[str] | None = None,
     _include: list[str] | None = None,
     _initial_values: dict | object | None = None,
-    **kwargs: FieldSpec | FieldHook | tuple,
+    **kwargs: Field | FieldHook | tuple,
 ) -> Config:
     """Introspect *fn*'s signature and return a :class:`Config`.
 
@@ -521,15 +524,15 @@ def build_config(
         Per-field customisation passed as keyword arguments named after the
         function parameter.  Supported shorthand values:
 
-        * ``FieldSpec(...)`` / ``FieldHook`` — passed through as-is
-        * ``(min, max)`` → ``FieldSpec(min=min, max=max)``
-        * ``(min, max, step)`` → ``FieldSpec(min=min, max=max, step=step)``
-        * ``range(a, b, step)`` → ``FieldSpec(min=a, max=b, step=step)``
+        * ``Field(...)`` / ``FieldHook`` — passed through as-is
+        * ``(min, max)`` → ``Field(min=min, max=max)``
+        * ``(min, max, step)`` → ``Field(min=min, max=max, step=step)``
+        * ``range(a, b, step)`` → ``Field(min=a, max=b, step=step)``
         * ``["a", "b", "c"]`` → ``dcc.Dropdown(options=[...])``
         * ``{"Label": "value", ...}`` → ``dcc.Dropdown`` with label/value pairs
-        * ``"My Label"`` → ``FieldSpec(label="My Label")``
-        * ``dcc.Component`` → ``FieldSpec(component=component)``
-        * ``callable`` → ``FieldSpec(validator=callable)``
+        * ``"My Label"`` → ``Field(label="My Label")``
+        * ``dcc.Component`` → ``Field(component=component)``
+        * ``callable`` → ``Field(validator=callable)``
 
         Example::
 
@@ -541,14 +544,14 @@ def build_config(
                 score=lambda v: "Must be 0–1" if not 0 <= v <= 1 else None,
             )
 
-        Overridden by ``Annotated[T, FieldSpec(...)]`` in the signature.
+        Overridden by ``Annotated[T, Field(...)]`` in the signature.
         Use ``_field_specs`` when you need to build the dict programmatically.
     _field_specs :
         Dict-based alternative to ``**kwargs``.  Takes precedence over
         ``**kwargs`` for the same field name.
     _styles :
         Type-level CSS dicts, keyed by slot name.  Applied to every field
-        of that type unless the field has its own ``FieldSpec.style``.
+        of that type unless the field has its own ``Field.style``.
 
         * ``"str"`` → ``dcc.Input(type="text")``
         * ``"int"`` → ``dcc.Input(type="number", step=1)``
@@ -566,7 +569,7 @@ def build_config(
         Same as *_styles* but for CSS class names.
     _cols :
         Number of columns in the form grid. Default ``1`` (vertical stack).
-        Use ``FieldSpec.col_span`` on individual fields to span columns.
+        Use ``Field.col_span`` on individual fields to span columns.
     _show_docstring :
         Prepend the function's docstring as a paragraph above the fields.
         Default ``True``.
@@ -608,19 +611,19 @@ def build_config(
 
     # Normalize **kwargs shorthands and merge with _field_specs.
     # _field_specs wins over **kwargs for the same field name.
-    normalized: dict[str, FieldSpec | FieldHook] = {}
+    normalized: dict[str, Field | FieldHook] = {}
     for name, val in kwargs.items():
-        if isinstance(val, FieldSpec) or isinstance(val, FieldHook):
+        if isinstance(val, Field) or isinstance(val, FieldHook):
             normalized[name] = val
         elif isinstance(val, range):
-            # range(start, stop, step) → FieldSpec(min, max, step)
-            normalized[name] = FieldSpec(min=val.start, max=val.stop, step=val.step)
+            # range(start, stop, step) → Field(min, max, step)
+            normalized[name] = Field(min=val.start, max=val.stop, step=val.step)
         elif isinstance(val, tuple):
             # (min, max) or (min, max, step)
             if len(val) == 2:
-                normalized[name] = FieldSpec(min=val[0], max=val[1])
+                normalized[name] = Field(min=val[0], max=val[1])
             elif len(val) == 3:
-                normalized[name] = FieldSpec(min=val[0], max=val[1], step=val[2])
+                normalized[name] = Field(min=val[0], max=val[1], step=val[2])
             else:
                 raise ValueError(
                     f"build_config kwarg {name!r}: tuple must be (min, max) or "
@@ -628,26 +631,26 @@ def build_config(
                 )
         elif isinstance(val, list):
             # list → Dropdown with those options
-            normalized[name] = FieldSpec(
+            normalized[name] = Field(
                 component=dcc.Dropdown(options=val, value=val[0] if val else None)
             )
         elif isinstance(val, dict):
             # dict → Dropdown with label/value pairs
             options = [{"label": k, "value": v} for k, v in val.items()]
-            normalized[name] = FieldSpec(
+            normalized[name] = Field(
                 component=dcc.Dropdown(
                     options=options, value=options[0]["value"] if options else None
                 )
             )
         elif isinstance(val, str):
             # plain string → label override
-            normalized[name] = FieldSpec(label=val)
+            normalized[name] = Field(label=val)
         elif hasattr(val, "id") or hasattr(val, "_type"):
             # Dash component → component override
-            normalized[name] = FieldSpec(component=val)
+            normalized[name] = Field(component=val)
         elif callable(val):
             # bare callable → validator
-            normalized[name] = FieldSpec(validator=val)
+            normalized[name] = Field(validator=val)
         else:
             normalized[name] = val
     external_specs = {**normalized, **(_field_specs or {})}
@@ -740,10 +743,10 @@ def _time_field_id(config_id: str, f: _Field) -> str:
 
 def _resolve_spec(
     f: _Field,
-    external_specs: dict[str, FieldSpec | FieldHook],
+    external_specs: dict[str, Field | FieldHook],
     styles: dict[str, dict],
     class_names: dict[str, str],
-) -> FieldSpec:
+) -> Field:
     """Merge tiers: Annotated (tier 3) > field_specs (tier 2) > type-level (tier 1)."""
     if f.spec is not None:
         # Annotated spec wins entirely over external
@@ -751,11 +754,11 @@ def _resolve_spec(
     else:
         ext = external_specs.get(f.name)
         if isinstance(ext, FieldHook):
-            spec = FieldSpec(hook=ext)
-        elif isinstance(ext, FieldSpec):
+            spec = Field(hook=ext)
+        elif isinstance(ext, Field):
             spec = copy.copy(ext)
         else:
-            spec = FieldSpec()
+            spec = Field()
 
     # Fill visual properties from type-level dicts where spec didn't set them
     if spec.style is None and f.type in styles:
@@ -836,7 +839,7 @@ def _get_fields(
         )
 
         # Legacy: FieldHook as default — kept for renderer functions (e.g. FromPlotly).
-        # For user functions, prefer FieldSpec(hook=...) via field_specs or Annotated.
+        # For user functions, prefer Field(hook=...) via field_specs or Annotated.
         hook_from_default: FieldHook | None = None
         if isinstance(raw_default, FieldHook):
             hook_from_default = raw_default
@@ -844,33 +847,29 @@ def _get_fields(
 
         annotation = hints.get(param.name, param.annotation)
 
-        # Extract FieldSpec (and bare callable validators) from Annotated[T, ...]
-        annotated_spec: FieldSpec | None = None
+        # Extract Field (and bare callable validators) from Annotated[T, ...]
+        annotated_spec: Field | None = None
         if get_origin(annotation) is Annotated:
             inner_args = get_args(annotation)
             annotation = inner_args[0]
             annotated_spec = next(
-                (m for m in inner_args[1:] if isinstance(m, FieldSpec)), None
+                (m for m in inner_args[1:] if isinstance(m, Field)), None
             )
             # A bare callable in Annotated metadata becomes the validator
             bare_validator = next(
-                (
-                    m
-                    for m in inner_args[1:]
-                    if callable(m) and not isinstance(m, FieldSpec)
-                ),
+                (m for m in inner_args[1:] if callable(m) and not isinstance(m, Field)),
                 None,
             )
             if bare_validator is not None:
                 if annotated_spec is None:
-                    annotated_spec = FieldSpec(validator=bare_validator)
+                    annotated_spec = Field(validator=bare_validator)
                 elif annotated_spec.validator is None:
                     annotated_spec = copy.copy(annotated_spec)
                     annotated_spec.validator = bare_validator
 
         # Legacy hook-as-default: fold into annotated_spec so _resolve_spec sees it
         if hook_from_default is not None and annotated_spec is None:
-            annotated_spec = FieldSpec(hook=hook_from_default)
+            annotated_spec = Field(hook=hook_from_default)
 
         field_type, args, optional = _infer_type(annotation, raw_default)
         fields.append(
@@ -953,15 +952,33 @@ def _validate(f: _Field, value: Any) -> str | None:
             int(value)
         elif f.type == "float":
             float(value)
-        elif f.type == "list":
-            elem_type = f.args[0] if f.args else str
-            [elem_type(x.strip()) for x in str(value).split(",")]
-        elif f.type == "tuple":
-            parts = [x.strip() for x in str(value).split(",")]
-            if f.args:
-                tuple(t(v) for t, v in zip(f.args, parts, strict=False))
+        elif f.type in ("list", "tuple"):
+            items = [x.strip() for x in str(value).split(",") if x.strip()]
+            if f.type == "list":
+                elem_type = f.args[0] if f.args else str
+                [elem_type(x) for x in items]
+            elif f.args:
+                tuple(t(v) for t, v in zip(f.args, items, strict=False))
+            spec = f.spec
+            if spec:
+                if spec.min_length is not None and len(items) < spec.min_length:
+                    return f"Minimum {spec.min_length} items"
+                if spec.max_length is not None and len(items) > spec.max_length:
+                    return f"Maximum {spec.max_length} items"
     except (ValueError, TypeError):
         return "Invalid value"
+
+    if f.type in ("str", "path"):
+        s = str(value)
+        spec = f.spec
+        if spec:
+            if spec.min_length is not None and len(s) < spec.min_length:
+                return f"Minimum {spec.min_length} characters"
+            if spec.max_length is not None and len(s) > spec.max_length:
+                return f"Maximum {spec.max_length} characters"
+            if spec.pattern is not None and not re.fullmatch(spec.pattern, s):
+                return f"Must match: {spec.pattern}"
+
     return None
 
 
@@ -1003,7 +1020,7 @@ def _build_field(
     label_class_name: str,
 ) -> html.Div:
     """Build a labeled input component for a single field."""
-    spec = f.spec or FieldSpec()
+    spec = f.spec or Field()
     fid = _field_id(config_id, f)
 
     label_text = spec.label or f.name.replace("_", " ").title()
@@ -1042,12 +1059,12 @@ def _build_field(
     return html.Div(children, style=wrapper_style or None)
 
 
-def _debounce(spec: FieldSpec) -> bool:
+def _debounce(spec: Field) -> bool:
     """Resolve effective debounce setting for a field (default: True)."""
     return True if spec.debounce is None else spec.debounce
 
 
-def _make_component(config_id: str, f: _Field, spec: FieldSpec, fid: str) -> Any:
+def _make_component(config_id: str, f: _Field, spec: Field, fid: str) -> Any:
     """Build the Dash input component for a field based on its type."""
     if f.type == "bool":
         return dcc.Checklist(
@@ -1158,15 +1175,20 @@ def _make_component(config_id: str, f: _Field, spec: FieldSpec, fid: str) -> Any
             value=str(f.default) if f.default is not None else "",
             placeholder="/path/to/file",
             debounce=_debounce(spec),
+            minLength=spec.min_length,
+            maxLength=spec.max_length,
             style=spec.style,
             className=spec.class_name,
         )
+    # str (fallback)
     return dcc.Input(
         id=fid,
         type="text",
         value=str(f.default) if f.default is not None else "",
         placeholder="",
         debounce=_debounce(spec),
+        minLength=spec.min_length,
+        maxLength=spec.max_length,
         style=spec.style,
         className=spec.class_name,
     )
