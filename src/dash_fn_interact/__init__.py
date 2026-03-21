@@ -4,27 +4,27 @@
 """dash-fn-interact — introspect a typed callable into a Dash form."""
 
 from dash_fn_interact._config_builder import Config, FieldRef, build_config, field_id
+from dash_fn_interact._field_components import (
+    FieldMaker,
+    make_dbc_field,
+    make_dcc_field,
+    make_dmc_field,
+)
 from dash_fn_interact._interact import interact
 from dash_fn_interact._spec import Field, FieldHook, FromComponent, fixed
-from dash_fn_interact.backends import (
-    ComponentBackend,
-    DBCBackend,
-    DCCBackend,
-    DMCBackend,
-)
 
 __all__ = [
-    "ComponentBackend",
     "Config",
-    "DBCBackend",
-    "DCCBackend",
-    "DMCBackend",
     "Field",
     "FieldHook",
+    "FieldMaker",
     "FieldRef",
     "FromComponent",
     "build_config",
     "field_id",
     "fixed",
     "interact",
+    "make_dbc_field",
+    "make_dcc_field",
+    "make_dmc_field",
 ]

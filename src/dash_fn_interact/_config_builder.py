@@ -566,7 +566,7 @@ def build_config(
     _include: list[str] | None = None,
     _initial_values: dict | object | None = None,
     _validator: Callable[[dict], str | None] | None = None,
-    _backend: Any = None,
+    _field_components: Any = None,
     **kwargs: Field | FieldHook | tuple,
 ) -> Config:
     """Introspect *fn*'s signature and return a :class:`Config`.
@@ -664,10 +664,10 @@ def build_config(
         :meth:`form_invalid_output`.  It is also included in the ``errors``
         dict returned by :meth:`build_kwargs_validated` under the key
         ``"_form"``.
-    _backend :
+    _field_components :
         The component library used to render the form controls.
         Pass ``"dmc"``, ``"dbc"``, or ``"dcc"`` (explicit fallback), or a custom
-        :class:`~dash_fn_interact.backends.ComponentBackend` subclass instance.
+        callable matching :class:`~dash_fn_interact._field_components.FieldMaker`.
         Omitting it (or passing ``"auto"``) picks ``"dmc"`` when
         ``dash-mantine-components`` is installed, otherwise ``"dcc"``.
 
@@ -760,9 +760,9 @@ def build_config(
 
     states = _build_states(config_id, fields)
 
-    from dash_fn_interact.backends import _resolve_backend
+    from dash_fn_interact._field_components import _resolve_field_maker
 
-    backend = _resolve_backend(_backend)
+    field_maker = _resolve_field_maker(_field_components)
 
     label_style = styles.get("label")
     label_class_name = class_names.get("label", "")
@@ -784,7 +784,7 @@ def build_config(
 
     field_defaults = {f.name: f.default for f in fields}
     for f in fields:
-        child = _build_field(config_id, f, label_style, label_class_name, backend)
+        child = _build_field(config_id, f, label_style, label_class_name, field_maker)
         if f.spec and f.spec.visible:
             other, op, val = f.spec.visible
             show = _check_visible(field_defaults.get(other), op, val)
@@ -1011,7 +1011,7 @@ _RESERVED = frozenset(
         "_include",
         "_initial_values",
         "_validator",
-        "_backend",
+        "_field_components",
     }
 )
 
@@ -1126,7 +1126,7 @@ def _build_field(
     f: _Field,
     label_style: dict | None,
     label_class_name: str,
-    backend: Any,
+    field_maker: Any,
 ) -> html.Div:
     """Build a labeled input component for a single field."""
     spec = f.spec or Field()
@@ -1151,7 +1151,7 @@ def _build_field(
             )
         return html.Div(children, style=wrapper_style or None)
 
-    component = backend.make(config_id, f, spec, fid)
+    component = field_maker(config_id, f, spec, fid)
     children = [label, component]
     if spec.description:
         children.append(
