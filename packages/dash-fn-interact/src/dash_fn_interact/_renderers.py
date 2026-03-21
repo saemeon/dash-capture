@@ -96,6 +96,7 @@ def to_component(result: Any, renderer: Callable[[Any], Any] | None) -> Any:
     # Built-in: Plotly Figure → dcc.Graph (plotly is a project dependency)
     try:
         import plotly.graph_objects as go  # noqa: PLC0415
+
         if isinstance(result, go.Figure):
             return dcc.Graph(figure=result)
     except ImportError:
@@ -121,7 +122,9 @@ def to_component(result: Any, renderer: Callable[[Any], Any] | None) -> Any:
             return _dataframe_to_component(result)
 
     # Built-in: matplotlib Figure → base64 PNG image
-    if "matplotlib.figure" in sys.modules and isinstance(result, sys.modules["matplotlib.figure"].Figure):
+    if "matplotlib.figure" in sys.modules and isinstance(
+        result, sys.modules["matplotlib.figure"].Figure
+    ):
         return _matplotlib_to_img(result)
 
     # Fallback: repr
@@ -134,6 +137,7 @@ def to_component(result: Any, renderer: Callable[[Any], Any] | None) -> Any:
 def _dataframe_to_component(df: Any) -> Any:
     try:
         from dash import dash_table  # noqa: PLC0415
+
         return dash_table.DataTable(
             data=df.to_dict("records"),
             columns=[{"name": str(c), "id": str(c)} for c in df.columns],

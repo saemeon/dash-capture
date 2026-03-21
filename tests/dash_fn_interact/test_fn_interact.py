@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from dash import dcc, html
-
 from dash_fn_interact import FnForm
 from dash_fn_interact.fn_interact import FnPanel, build_fn_panel
 
@@ -73,7 +72,7 @@ def test_loading_true_wraps_output():
     def _has_loading(comp):
         if isinstance(comp, dcc.Loading):
             return True
-        for child in (getattr(comp, "children", None) or []):
+        for child in getattr(comp, "children", None) or []:
             if isinstance(child, list):
                 if any(_has_loading(c) for c in child):
                     return True
@@ -93,7 +92,7 @@ def test_loading_false_no_loading_wrapper():
     def _has_loading(comp):
         if isinstance(comp, dcc.Loading):
             return True
-        for child in (getattr(comp, "children", None) or []):
+        for child in getattr(comp, "children", None) or []:
             if isinstance(child, list):
                 if any(_has_loading(c) for c in child):
                     return True
@@ -116,7 +115,7 @@ def test_manual_mode_has_apply_button():
     def _has_button(comp):
         if isinstance(comp, html.Button):
             return True
-        for child in (getattr(comp, "children", None) or []):
+        for child in getattr(comp, "children", None) or []:
             if isinstance(child, list):
                 if any(_has_button(c) for c in child):
                     return True
@@ -136,7 +135,7 @@ def test_auto_mode_has_no_apply_button():
     def _has_button(comp):
         if isinstance(comp, html.Button):
             return True
-        for child in (getattr(comp, "children", None) or []):
+        for child in getattr(comp, "children", None) or []:
             if isinstance(child, list):
                 if any(_has_button(c) for c in child):
                     return True

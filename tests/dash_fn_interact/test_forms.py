@@ -15,11 +15,10 @@ class _Mode(Enum):
     fast = "fast"
     slow = "slow"
 
+
 import pytest
 from dash import dcc
-
 from dash_fn_interact import Field, FnForm, fixed
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

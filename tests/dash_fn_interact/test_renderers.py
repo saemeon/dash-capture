@@ -5,11 +5,8 @@
 
 from __future__ import annotations
 
-import pytest
 from dash import dcc, html
-
-from dash_fn_interact._renderers import to_component, register_renderer
-
+from dash_fn_interact._renderers import register_renderer, to_component
 
 # ── built-ins ─────────────────────────────────────────────────────────────────
 
@@ -54,6 +51,7 @@ def test_plotly_figure_returns_graph():
 
 def test_matplotlib_figure_returns_img():
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 

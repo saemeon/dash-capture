@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from dash import html
-
 from dash_fn_interact import FnForm
 from dash_fn_interact.fn_interact import FnPanel
 from dash_interact import interact, interactive, interactive_output

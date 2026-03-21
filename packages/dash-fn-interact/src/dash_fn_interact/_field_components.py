@@ -142,9 +142,7 @@ def make_dcc_field(config_id: str, f: Any, spec: Field, fid: str) -> Any:
         )
     if f.type == "datetime":
         default_date = (
-            f.default.date().isoformat()
-            if isinstance(f.default, datetime)
-            else None
+            f.default.date().isoformat() if isinstance(f.default, datetime) else None
         )
         default_time = (
             f.default.strftime("%H:%M") if isinstance(f.default, datetime) else None
@@ -175,7 +173,11 @@ def make_dcc_field(config_id: str, f: Any, spec: Field, fid: str) -> Any:
         if step is None:
             step = 1 if f.type == "int" else "any"
         if spec.widget == "slider" and spec.min is not None and spec.max is not None:
-            slider_step = spec.step if spec.step not in (None, "any") else (1 if f.type == "int" else 0.1)
+            slider_step = (
+                spec.step
+                if spec.step not in (None, "any")
+                else (1 if f.type == "int" else 0.1)
+            )
             slider = dcc.Slider(
                 id=fid,
                 min=spec.min,
@@ -328,7 +330,11 @@ def make_dmc_field(config_id: str, f: Any, spec: Field, fid: str) -> Any:
         if step is None:
             step = 1 if f.type == "int" else 0.01
         if spec.widget == "slider" and spec.min is not None and spec.max is not None:
-            slider_step = spec.step if spec.step not in (None, "any") else (1 if f.type == "int" else 0.1)
+            slider_step = (
+                spec.step
+                if spec.step not in (None, "any")
+                else (1 if f.type == "int" else 0.1)
+            )
             return dmc.Slider(
                 id=fid,
                 min=spec.min,
@@ -458,7 +464,11 @@ def make_dbc_field(config_id: str, f: Any, spec: Field, fid: str) -> Any:
         if step is None:
             step = 1 if f.type == "int" else None
         if spec.widget == "slider" and spec.min is not None and spec.max is not None:
-            slider_step = spec.step if spec.step not in (None, "any") else (1 if f.type == "int" else 0.1)
+            slider_step = (
+                spec.step
+                if spec.step not in (None, "any")
+                else (1 if f.type == "int" else 0.1)
+            )
             slider = dcc.Slider(
                 id=fid,
                 min=spec.min,

@@ -28,9 +28,7 @@ class FnPanel(html.Div):
         ])
     """
 
-    def __init__(
-        self, children: list[Any], *, form: FnForm, output: html.Div
-    ) -> None:
+    def __init__(self, children: list[Any], *, form: FnForm, output: html.Div) -> None:
         self._form = form
         self._output = output
         super().__init__(children)
@@ -99,7 +97,10 @@ def build_fn_panel(
             try:
                 result = fn(**cfg.build_kwargs(values))
             except Exception as exc:
-                return html.Pre(f"Error: {exc}", style={"color": "#d9534f", "fontFamily": "monospace"})
+                return html.Pre(
+                    f"Error: {exc}",
+                    style={"color": "#d9534f", "fontFamily": "monospace"},
+                )
             return to_component(result, _render)
 
         return FnPanel(
@@ -109,7 +110,11 @@ def build_fn_panel(
                     "Apply",
                     id=btn_id,
                     n_clicks=0,
-                    style={"marginTop": "8px", "padding": "6px 16px", "cursor": "pointer"},
+                    style={
+                        "marginTop": "8px",
+                        "padding": "6px 16px",
+                        "cursor": "pointer",
+                    },
                 ),
                 output_div,
             ],
@@ -126,7 +131,10 @@ def build_fn_panel(
             try:
                 result = fn(**cfg.build_kwargs(values))
             except Exception as exc:
-                return html.Pre(f"Error: {exc}", style={"color": "#d9534f", "fontFamily": "monospace"})
+                return html.Pre(
+                    f"Error: {exc}",
+                    style={"color": "#d9534f", "fontFamily": "monospace"},
+                )
             return to_component(result, _render)
 
         return FnPanel([cfg, output_div], form=cfg, output=_inner)

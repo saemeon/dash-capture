@@ -57,7 +57,9 @@ def _read_constraint_meta(meta: Any) -> dict[str, Any]:
     items: list[Any] = []
 
     # Pydantic v2 FieldInfo: constraints live in .metadata as annotated_types objects
-    if "pydantic.fields" in sys.modules and isinstance(meta, sys.modules["pydantic.fields"].FieldInfo):
+    if "pydantic.fields" in sys.modules and isinstance(
+        meta, sys.modules["pydantic.fields"].FieldInfo
+    ):
         items = getattr(meta, "metadata", [])
 
     # annotated_types used directly (e.g. Annotated[int, Ge(0), Le(100)])
