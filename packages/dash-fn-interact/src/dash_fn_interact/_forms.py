@@ -891,7 +891,7 @@ class FnForm(Form):
         per-field validation; return an error string on failure, ``None`` on success.
     _field_components :
         Component factory: ``"dmc"``, ``"dbc"``, ``"dcc"``, ``"auto"``, or any
-        callable matching :class:`~dash_fn_interact.FieldMaker`.
+        callable matching :class:`~dash_interact.FieldMaker`.
     """
 
     def __init__(

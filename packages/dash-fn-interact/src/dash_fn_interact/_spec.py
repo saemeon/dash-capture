@@ -73,7 +73,7 @@ def fixed(value: Any) -> _FieldFixed:
     """Pass a constant to the function without rendering a UI control.
 
     Analogous to ``ipywidgets.fixed()``.  The field is hidden from the form
-    but its value is always injected by :meth:`~dash_fn_interact.Config.build_kwargs`.
+    but its value is always injected by :meth:`~dash_interact.Config.build_kwargs`.
 
     Example::
 
@@ -90,16 +90,16 @@ def fixed(value: Any) -> _FieldFixed:
 
 @dataclass
 class Field:
-    """Per-field configuration for :class:`~dash_fn_interact.FnForm`.
+    """Per-field configuration for :class:`~dash_interact.FnForm`.
 
     Can be supplied in three ways (highest priority wins):
 
     1. **In-signature** via ``Annotated[T, Field(...)]`` — for functions
        you own.
     2. **External** via keyword argument on
-       :class:`~dash_fn_interact.FnForm` — for functions you don't own.
+       :class:`~dash_interact.FnForm` — for functions you don't own.
     3. Type-level ``_styles`` / ``_class_names`` dicts on
-       :class:`~dash_fn_interact.FnForm` fill in any visual properties
+       :class:`~dash_interact.FnForm` fill in any visual properties
        not set by the above.
 
     A :class:`FieldHook` instance may also be passed directly as a kwarg
@@ -110,7 +110,7 @@ class Field:
     default: Any = None
     """Default value for the field.
 
-    Used in :class:`~dash_fn_interact.Form` declarative subclasses::
+    Used in :class:`~dash_interact.Form` declarative subclasses::
 
         class MyForm(Form):
             dpi: int = Field(min=72, max=300, default=150)

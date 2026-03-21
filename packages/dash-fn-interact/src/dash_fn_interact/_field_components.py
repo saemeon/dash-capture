@@ -3,7 +3,7 @@
 
 """Field component functions for dash-fn-interact.
 
-Pass ``_field_components`` to :func:`~dash_fn_interact.build_config` as a
+Pass ``_field_components`` to :func:`~dash_interact.build_config` as a
 string shorthand or any callable matching :class:`FieldMaker`.  When omitted,
 ``"auto"`` is used: :func:`make_dmc_field` if ``dash-mantine-components`` is
 installed, otherwise :func:`make_dcc_field` as a fallback.
@@ -45,7 +45,7 @@ class FieldMaker(Protocol):
     """Callable protocol for field component factories.
 
     Any callable with this signature can be passed as ``_field_components``
-    to :func:`~dash_fn_interact.build_config`.
+    to :func:`~dash_interact.build_config`.
     """
 
     def __call__(self, config_id: str, f: Any, spec: Field, fid: str) -> Any:

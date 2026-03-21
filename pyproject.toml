@@ -1,30 +1,8 @@
-[project]
-name = "dash-fn-interact"
-dynamic = ["version"]
-description = "An introspection-based UI generator for Plotly Dash. Automatically transform type-hinted Python functions into reactive Dash forms."
-keywords = ["plotly", "dash", "visualization", "dashboard"]
-classifiers = [
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Operating System :: OS Independent",
-]
-readme = "README.md"
-license = "MIT"
-authors = [
-    { name = "Simon Niederberger", email = "s.niederberger@hotmail.com" },
-]
-maintainers = [
-    { name = "Simon Niederberger", email = "s.niederberger@hotmail.com" },
-]
-requires-python = ">=3.10"
-dependencies = ["dash>=4.0.0", "matplotlib>=3.10.8", "plotly>=6.6.0"]
+[tool.uv.workspace]
+members = ["packages/*"]
 
-[project.urls]
-Homepage = "https://github.com/saemeon/dash-fn-interact"
-Repository = "https://github.com/saemeon/dash-fn-interact"
+[tool.uv.sources]
+dash-fn-interact = { workspace = true }
 
 [dependency-groups]
 test = ["pytest", "pytest-cov"]
@@ -35,37 +13,20 @@ dev = [
     "ty",
     "ipykernel>=7.2.0",
     "ipywidgets>=8.1.8",
+    "pydantic>=2.12.5",
     { include-group = "test" },
     { include-group = "doc" },
 ]
 
-[build-system]
-requires = ["setuptools>=61.0", "setuptools-scm>=8.0"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools_scm]
-write_to = "src/dash_fn_interact/_version.py"
-version_scheme = "post-release"
-local_scheme = "no-local-version"
-
-[tool.setuptools.dynamic]
-version = { attr = "dash_fn_interact._version.__version__" }
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-dash_fn_interact = ["py.typed"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=src --cov-report=term-missing"
+addopts = "--cov=packages --cov-report=term-missing"
 
 [tool.ty.environment]
 python = ".venv"
 
 [tool.ty.src]
-include = ["src"]
+include = ["packages"]
 
 [tool.mypy]
 ignore_missing_imports = true
@@ -76,4 +37,4 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "PERF"]
-ignore = ["E203"]
+ignore = ["E203", "E501"]

@@ -5,7 +5,7 @@
 
 Import as a module for a pyplot-style authoring experience::
 
-    from dash_fn_interact import page
+    from dash_interact import page
 
     page.H1("My App")
 
@@ -26,7 +26,7 @@ from dash import Dash, html
 from dash_fn_interact.fn_interact import build_fn_panel
 from dash_fn_interact.utils import _caller_name, _in_jupyter
 
-_THIS_MODULES = {"dash_fn_interact.page"}
+_THIS_MODULES = {"dash_interact.page"}
 
 
 class _PageManager:
@@ -91,7 +91,7 @@ class Page(html.Div):
     --------
     ::
 
-        from dash_fn_interact import Page
+        from dash_interact import Page
 
         p = Page(manual=True)
         p.H1("My App")
@@ -215,7 +215,7 @@ def current() -> Page:
     Use this to retrieve the current page when embedding it into a larger
     Dash layout after building panels with the module-level API::
 
-        from dash_fn_interact import page, interact
+        from dash_interact import page, interact
 
         @interact
         def controls(): ...
@@ -264,4 +264,4 @@ def __getattr__(name: str) -> Any:
             return comp
 
         return _factory
-    raise AttributeError(f"module 'dash_fn_interact.page' has no attribute {name!r}")
+    raise AttributeError(f"module 'dash_interact.page' has no attribute {name!r}")
