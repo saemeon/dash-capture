@@ -1,0 +1,21 @@
+Package: ggcorpframe
+Title: Corporate Design Frame for ggplot2 and PNG Images
+Version: 0.1.0
+Authors@R:
+    person("Simon", "Niederberger", email = "s.niederberger@hotmail.com",
+           role = c("aut", "cre"))
+Description: Wraps ggplot2 plots or raw PNG images with a corporate design
+    frame (header with title/subtitle, footer with footnotes/sources) via a
+    Python/matplotlib subprocess. No Shiny dependency — works standalone for
+    scripts, RMarkdown, and Quarto. Use shinycorpframe for Shiny integration.
+License: MIT + file LICENSE
+URL: https://github.com/saemeon/dash-interact
+Imports:
+    ggplot2
+Suggests:
+    testthat (>= 3.0.0)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.0
+Config/testthat/edition: 3
+SystemRequirements: Python (>= 3.10), matplotlib
