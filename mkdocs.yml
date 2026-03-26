@@ -118,7 +118,7 @@ extra_css:
   - assets/extra.css
 
 watch:
-  - packages
+  - src
 
 remote_branch: documentation
 
@@ -129,4 +129,4 @@ extra:
     default: latest
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/saemeon/dash-interact
+      link: https://github.com/saemeon/dash-capture
