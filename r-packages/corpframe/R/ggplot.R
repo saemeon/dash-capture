@@ -6,13 +6,30 @@
   tmp_in <- tempfile(fileext = ".png")
   on.exit(unlink(tmp_in), add = TRUE)
 
-  # Figsize priority: corporate_frame(figsize=) > ggsave(width=,height=) > default
+  dpi <- params$dpi %||% 300L
+  title <- params$title %||% ""
+  subtitle <- params$subtitle %||% ""
+  footnotes <- params$footnotes %||% ""
+  sources <- params$sources %||% ""
+
   figsize <- params$figsize
   if (!is.null(figsize)) {
     if (is.character(figsize)) figsize <- figsizes[[figsize]]
-    width <- figsize[1]
-    height <- figsize[2]
+    target_w <- figsize[1]
+    target_h <- figsize[2]
+
+    # Round trip 1: ask Python how much plot area is available
+    plot_area <- .query_plot_area(
+      target_w, target_h,
+      title = title, subtitle = subtitle,
+      footnotes = footnotes, sources = sources,
+      dpi = dpi, python = params$python
+    )
+    width <- plot_area[["width"]]
+    height <- plot_area[["height"]]
   } else {
+    target_w <- NULL
+    target_h <- NULL
     dev_size <- grDevices::dev.size("in")
     if (dev_size[1] > 1 && dev_size[2] > 1) {
       width <- dev_size[1]
@@ -22,21 +39,20 @@
       height <- 5
     }
   }
-  dpi <- params$dpi %||% 300L
 
+  # Render ggplot at the exact plot area size
   ggplot2::ggsave(tmp_in, plot = plot, width = width, height = height,
                   dpi = dpi, device = "png")
 
   png_bytes <- readBin(tmp_in, "raw", file.info(tmp_in)$size)
 
+  # Round trip 2: apply the frame (with target figsize if set)
   framed <- .apply_frame(
     png_bytes,
-    title = params$title %||% "",
-    subtitle = params$subtitle %||% "",
-    footnotes = params$footnotes %||% "",
-    sources = params$sources %||% "",
-    dpi = dpi,
-    python = params$python
+    title = title, subtitle = subtitle,
+    footnotes = footnotes, sources = sources,
+    dpi = dpi, python = params$python,
+    target_width = target_w, target_height = target_h
   )
 
   tmp_out <- tempfile(fileext = ".png")
