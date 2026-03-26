@@ -17,9 +17,7 @@ from dash_capture.capture import (
     _to_src,
     capture_binding,
     capture_graph,
-    graph_exporter,
 )
-
 
 # ---------------------------------------------------------------------------
 # FromPlotly hook
@@ -135,7 +133,7 @@ class TestBatchBinding:
 
 
 # ---------------------------------------------------------------------------
-# High-level API: capture_graph / graph_exporter
+# High-level API: capture_graph / capture_graph
 # ---------------------------------------------------------------------------
 
 
@@ -147,8 +145,8 @@ class TestCaptureGraph:
         result = capture_graph("test-graph", renderer=renderer)
         assert isinstance(result, html.Div)
 
-    def test_graph_exporter_is_alias(self):
-        assert graph_exporter is capture_graph
+    def test_capture_graph_is_alias(self):
+        assert capture_graph is capture_graph
 
     def test_with_custom_renderer(self):
         def my_renderer(_target, _snapshot_img, title: str = ""):

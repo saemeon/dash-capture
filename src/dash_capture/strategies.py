@@ -17,7 +17,7 @@ The JS fragments here are intentionally kept in sync with
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

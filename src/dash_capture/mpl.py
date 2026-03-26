@@ -1,7 +1,7 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""Matplotlib renderers for use with :func:`dash_capture.graph_exporter`."""
+"""Matplotlib renderers for use with :func:`dash_capture.capture_graph`."""
 
 from __future__ import annotations
 

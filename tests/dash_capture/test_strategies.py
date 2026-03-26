@@ -3,7 +3,6 @@
 
 """Tests for dash_capture.strategies — JS fragment generation."""
 
-
 from dash_capture.strategies import (
     CaptureStrategy,
     _build_strip_patches,
@@ -301,6 +300,3 @@ def test_import():
     assert hasattr(dash_capture, "capture_batch")
     assert hasattr(dash_capture, "CaptureBinding")
     assert hasattr(dash_capture, "BatchBinding")
-    # backwards compat
-    assert hasattr(dash_capture, "graph_exporter")
-    assert hasattr(dash_capture, "component_exporter")

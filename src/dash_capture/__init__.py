@@ -18,9 +18,6 @@ from dash_capture.capture import (
     capture_binding,
     capture_element,
     capture_graph,
-    # backwards compat aliases
-    component_exporter,
-    graph_exporter,
 )
 from dash_capture.strategies import (
     CaptureStrategy,
@@ -45,7 +42,4 @@ __all__ = [
     "canvas_strategy",
     # hooks
     "FromPlotly",
-    # backwards compat
-    "graph_exporter",
-    "component_exporter",
 ]

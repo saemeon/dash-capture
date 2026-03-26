@@ -22,7 +22,7 @@ pip install dash-capture
 
 | Component | Description |
 |-----------|-------------|
-| `graph_exporter` | Capture wizard for `dcc.Graph` — modal with auto-generated fields, live preview, and PNG download |
+| `capture_graph` | Capture wizard for `dcc.Graph` — modal with auto-generated fields, live preview, and PNG download |
 | `build_wizard` | Generic modal dialog |
 | `build_dropdown` | Generic anchored dropdown with click-outside-to-close |
 | `FromPlotly` | `FieldHook` that pre-fills a field from the live Plotly figure |

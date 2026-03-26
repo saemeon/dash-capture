@@ -887,8 +887,3 @@ def capture_element(
         return html.Div(ensure_html2canvas([wizard]))
 
     return wizard
-
-
-# Backwards compatibility aliases
-graph_exporter = capture_graph
-component_exporter = capture_element
