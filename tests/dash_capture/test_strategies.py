@@ -3,7 +3,6 @@
 
 """Tests for dash_capture.strategies — JS fragment generation."""
 
-import pytest
 
 from dash_capture.strategies import (
     CaptureStrategy,
@@ -13,7 +12,6 @@ from dash_capture.strategies import (
     html2canvas_strategy,
     plotly_strategy,
 )
-
 
 # ---------------------------------------------------------------------------
 # CaptureStrategy dataclass
