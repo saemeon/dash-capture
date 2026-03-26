@@ -1,21 +1,41 @@
-[tool.uv.workspace]
-members = ["packages/*"]
-exclude = ["packages/corpframe-gallery", "packages/mcd", "packages/corpplt", "packages/corporate-design-packager"]
+[project]
+name = "dash-capture"
+dynamic = ["version"]
+description = "Browser capture & custom renderer pipeline for Plotly Dash components"
+keywords = ["plotly", "dash", "capture", "export", "screenshot", "visualization"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+]
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Simon Niederberger", email = "s.niederberger@hotmail.com" },
+]
+maintainers = [
+    { name = "Simon Niederberger", email = "s.niederberger@hotmail.com" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "dash-fn-forms",
+    "dash>=4.0.0",
+    "matplotlib>=3.10.8",
+    "plotly>=6.6.0",
+]
 
-[tool.uv.sources]
-dash-fn-forms = { workspace = true }
-dash-capture = { workspace = true }
-mpl-brandpacker = { workspace = true }
-corpframe = { workspace = true }
-gallery-viewer = { workspace = true }
+[project.urls]
+Homepage = "https://github.com/saemeon/dash-capture"
+Repository = "https://github.com/saemeon/dash-capture"
 
 [dependency-groups]
 test = ["pytest", "pytest-cov"]
 doc = ["mkdocs", "mkdocs-material", "mkdocstrings[python]", "mike"]
 dev = [
     "ruff",
-    "prek",
-    "ty",
     "numpy",
     "matplotlib",
     "pandas",
@@ -31,15 +51,27 @@ dev = [
     { include-group = "doc" },
 ]
 
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+local_scheme = "no-local-version"
+write_to = "src/dash_capture/_version.py"
+
+[tool.setuptools.dynamic]
+version = { attr = "dash_capture._version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dash_capture = ["py.typed", "assets/*.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=packages --cov-report=term-missing"
-
-[tool.ty.environment]
-python = ".venv"
-
-[tool.ty.src]
-include = ["packages"]
+addopts = "--cov=src --cov-report=term-missing"
 
 [tool.mypy]
 ignore_missing_imports = true

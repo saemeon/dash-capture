@@ -1,5 +1,5 @@
-import dash_fn_forms
+import dash_capture
 
 
 def test_import():
-    assert dash_fn_forms
+    assert dash_capture
