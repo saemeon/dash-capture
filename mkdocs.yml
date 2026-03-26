@@ -1,16 +1,15 @@
-site_name: dash-interact
-site_description: Build interactive Plotly Dash apps from type-hinted Python functions
+site_name: dash-capture
+site_description: Browser capture & custom renderer pipeline for Plotly Dash components
 site_author: Simon Niederberger
-site_url: https://saemeon.github.io/dash-interact/
+site_url: https://saemeon.github.io/dash-capture/
 
-repo_url: https://github.com/saemeon/dash-interact
-repo_name: saemeon/dash-interact
+repo_url: https://github.com/saemeon/dash-capture
+repo_name: saemeon/dash-capture
 
 copyright: "Copyright &copy; 2026 Simon Niederberger"
 
 nav:
-  - dash-interact: "index.md"
-  - dash-fn-forms: "fn-forms.md"
+  - dash-capture: "index.md"
 
 theme:
   name: material
@@ -86,7 +85,7 @@ plugins:
       handlers:
         python:
           # where to look for python modules. not strictly required, but helps, if building from an arbitrary folder
-          paths: [packages/dash-interact/src, packages/dash-fn-forms/src]
+          paths: [src]
           options:
             docstring_style: numpy
             docstring_section_style: spacy

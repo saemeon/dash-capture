@@ -22,7 +22,7 @@ from typing import Any, cast
 
 import dash
 from dash import Input, Output, State, dcc, html
-from dash_fn_forms import Field, FieldHook, FnForm, FromComponent, field_id
+from dash_fn_form import Field, FieldHook, FnForm, FromComponent, field_id
 
 from dash_capture._ids import id_generator
 from dash_capture.dropdown import build_dropdown

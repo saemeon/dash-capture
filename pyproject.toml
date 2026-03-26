@@ -21,7 +21,7 @@ maintainers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "dash-fn-forms",
+    "dash-fn-form",
     "dash>=4.0.0",
     "matplotlib>=3.10.8",
     "plotly>=6.6.0",
@@ -36,6 +36,8 @@ test = ["pytest", "pytest-cov"]
 doc = ["mkdocs", "mkdocs-material", "mkdocstrings[python]", "mike"]
 dev = [
     "ruff",
+    "prek",
+    "ty",
     "numpy",
     "matplotlib",
     "pandas",
