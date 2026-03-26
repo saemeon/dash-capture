@@ -66,8 +66,8 @@ Submodules (advanced)
 from mpl_brandpacker._config import configure
 from mpl_brandpacker.axes import BrandAxes
 from mpl_brandpacker.colors import ColorsBase
-from mpl_brandpacker.figsizes import FigsizesBase
 from mpl_brandpacker.figure import BrandFigure
+from mpl_brandpacker.sizes import FigsizesBase, SizesBase
 from mpl_brandpacker.utils import PrintableEnum
 
 __all__ = [
@@ -76,5 +76,6 @@ __all__ = [
     "BrandAxes",
     "ColorsBase",
     "FigsizesBase",
+    "SizesBase",
     "PrintableEnum",
 ]
