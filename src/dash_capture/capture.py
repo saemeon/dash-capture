@@ -47,7 +47,19 @@ from dash_capture.strategies import (
 
 
 class FromPlotly(FromComponent):
-    """Read a value from the Plotly figure as the field default.
+    """Pre-populate a form field from the live Plotly figure.
+
+    When the wizard opens, reads the current value from the running figure
+    so the user doesn't have to retype it. Useful for fields like title or
+    sources that may already be set on the figure.
+
+    Example::
+
+        capture_graph(
+            "my-graph",
+            title=FromPlotly("layout.title.text"),   # reads current title
+            sources="Internal data",
+        )
 
     Parameters
     ----------
@@ -697,13 +709,33 @@ def capture_graph(
     auto-generated form fields from the renderer's signature, and a
     download button.
 
+    **Renderer protocol:**
+
+    The renderer is a plain Python function. Any typed parameters it declares
+    (beyond the reserved ones below) become editable form fields in the wizard:
+
+    .. code-block:: python
+
+        def my_renderer(
+            _target,          # file-like — write your PNG bytes here
+            _snapshot_img,    # callable() → raw PNG bytes of the captured graph
+            title: str = "",  # → text input in the wizard
+            dpi: int = 150,   # → number input in the wizard
+        ):
+            ...
+
+    Reserved parameters injected automatically:
+
+    - ``_target`` — file-like object; call ``_target.write(bytes)`` to produce the download.
+    - ``_snapshot_img`` — callable that returns raw PNG bytes of the browser-captured figure.
+    - ``_fig_data`` — the Plotly figure dict (server-side access, no browser capture needed).
+
     Parameters
     ----------
     graph :
         The ``dcc.Graph`` component or its string ``id``.
     renderer :
-        Callable with signature
-        ``(_target, [_fig_data], [_snapshot_img], **fields)``.
+        Callable following the renderer protocol above.
         Defaults to :func:`dash_capture.mpl.snapshot_renderer`.
     trigger :
         String label or custom Dash component with ``n_clicks``.
