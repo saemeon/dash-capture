@@ -3,12 +3,18 @@
 
 """Capture pipeline for Dash components.
 
-Three API levels:
+Plotly figures only exist in the browser's JavaScript environment — the Python
+server never holds chart pixels. This module bridges that gap by triggering a
+browser-side capture and delivering the result to Python for post-processing,
+custom rendering, and download. No server-side headless browser required.
+
+Two API levels:
 
 - **Low-level**: :class:`CaptureBinding` — wires JS capture → ``dcc.Store``.
-  No wizard, no form. User builds their own UI.
+  No wizard, no form. User builds their own UI and handles the result.
 - **High-level**: :func:`capture_graph` / :func:`capture_element` — full wizard
-  with auto-generated form, live preview, and download.
+  with auto-generated form fields (from the renderer's type hints), live
+  preview, and download button.
 """
 
 from __future__ import annotations
@@ -24,8 +30,9 @@ import dash
 from dash import Input, Output, State, dcc, html
 from dash_fn_form import Field, FieldHook, FnForm, FromComponent, field_id
 
-from dash_capture._ids import _new_id
 from dash_capture._dropdown import build_dropdown
+from dash_capture._ids import _new_id
+from dash_capture._wizard import build_wizard
 from dash_capture.strategies import (
     _HTML2CANVAS_CAPTURE,
     CaptureStrategy,
@@ -33,7 +40,6 @@ from dash_capture.strategies import (
     html2canvas_strategy,
     plotly_strategy,
 )
-from dash_capture._wizard import build_wizard
 
 # ---------------------------------------------------------------------------
 # FromPlotly hook

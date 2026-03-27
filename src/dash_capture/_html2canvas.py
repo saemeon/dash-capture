@@ -11,21 +11,12 @@ from pathlib import Path
 from dash import html
 
 _ASSETS_DIR = Path(__file__).parent / "assets"
-_LOADED = False
-
-
 def html2canvas_script() -> html.Script:
     """Return a ``html.Script`` tag with the vendored html2canvas code.
 
     The script is loaded inline to avoid needing an external CDN.
-    Call this once in your app layout::
-
-        app.layout = html.Div([
-            html2canvas_script(),
-            ...
-        ])
-
-    Or use ``capture_element()`` which includes it automatically.
+    ``capture_element()`` calls this automatically, so you only need it
+    if you are building a custom layout without using ``capture_element``.
     """
     js_path = _ASSETS_DIR / "html2canvas.min.js"
     if not js_path.exists():
@@ -37,9 +28,8 @@ def html2canvas_script() -> html.Script:
 
 
 def ensure_html2canvas(children: list) -> list:
-    """Prepend html2canvas script to children list if not already present."""
-    global _LOADED
-    if not _LOADED:
-        _LOADED = True
-        return [html2canvas_script(), *children]
-    return children
+    """Prepend html2canvas script to children list.
+
+    Always injects — Dash deduplicates identical inline scripts.
+    """
+    return [html2canvas_script(), *children]

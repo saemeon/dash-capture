@@ -197,13 +197,8 @@ table = dash_table.DataTable(
     ],
 )
 
-app = dash.Dash(
-    __name__,
-    external_scripts=[
-        # html2canvas — needed for capture_element (table capture)
-        "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.0/html2canvas.min.js",
-    ],
-)
+app = dash.Dash(__name__)
+# html2canvas is auto-included by capture_element() — no CDN needed
 
 SECTION = {"marginBottom": "30px"}
 
