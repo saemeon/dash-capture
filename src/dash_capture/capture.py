@@ -25,7 +25,7 @@ from dash import Input, Output, State, dcc, html
 from dash_fn_form import Field, FieldHook, FnForm, FromComponent, field_id
 
 from dash_capture._ids import _new_id
-from dash_capture.dropdown import build_dropdown
+from dash_capture._dropdown import build_dropdown
 from dash_capture.strategies import (
     _HTML2CANVAS_CAPTURE,
     CaptureStrategy,
@@ -33,7 +33,7 @@ from dash_capture.strategies import (
     html2canvas_strategy,
     plotly_strategy,
 )
-from dash_capture.wizard import build_wizard
+from dash_capture._wizard import build_wizard
 
 # ---------------------------------------------------------------------------
 # FromPlotly hook

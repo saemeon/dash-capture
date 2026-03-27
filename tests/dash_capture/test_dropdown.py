@@ -5,7 +5,7 @@
 
 from dash import html
 
-from dash_capture.dropdown import build_dropdown
+from dash_capture._dropdown import build_dropdown
 
 
 class TestBuildDropdown:

@@ -6,7 +6,7 @@
 import pytest
 from dash import Input, html
 
-from dash_capture.wizard import Wizard, build_wizard
+from dash_capture._wizard import Wizard, build_wizard
 
 
 class TestWizard:
