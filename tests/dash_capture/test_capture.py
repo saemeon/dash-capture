@@ -3,7 +3,6 @@
 
 """Tests for dash_capture.capture — core capture API."""
 
-
 from dash import dcc, html
 from dash_fn_form import FieldHook, FromComponent
 
@@ -116,7 +115,6 @@ class TestCaptureBinding:
         b1 = capture_binding("a")
         b2 = capture_binding("b")
         assert b1.store_id != b2.store_id
-
 
 
 # ---------------------------------------------------------------------------

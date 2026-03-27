@@ -483,7 +483,6 @@ cfg7 = FnForm("validated", validated_fn, age=(0, 120, 1))
     prevent_initial_call=True,
 )
 def apply7(_n, *values):
-
     kwargs, errors = cfg7.build_kwargs_validated(values)
     if errors:
         return (

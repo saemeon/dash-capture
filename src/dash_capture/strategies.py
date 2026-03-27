@@ -184,8 +184,12 @@ def plotly_strategy(
         Output format: ``"png"``, ``"jpeg"``, ``"webp"``, ``"svg"``.
     """
     patches = _build_strip_patches(
-        strip_title, strip_legend, strip_annotations,
-        strip_axis_titles, strip_colorbar, strip_margin,
+        strip_title,
+        strip_legend,
+        strip_annotations,
+        strip_axis_titles,
+        strip_colorbar,
+        strip_margin,
     )
     preprocess = _build_plotly_preprocess(patches, _params or {})
     capture = _PLOTLY_CAPTURE if preprocess else _PLOTLY_CAPTURE_SIMPLE
@@ -241,8 +245,7 @@ def build_capture_js(
     """
     js_args = ", ".join(["n_clicks", "n_intervals", "fmt", *active_capture])
     js_build_opts = "\n                ".join(
-        f"if ({p} != null) opts.{p[len('capture_'):]} = {p};"
-        for p in active_capture
+        f"if ({p} != null) opts.{p[len('capture_') :]} = {p};" for p in active_capture
     )
 
     # Element lookup — Plotly-aware (look for .js-plotly-plot inside container)

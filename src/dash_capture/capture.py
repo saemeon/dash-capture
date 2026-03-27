@@ -216,7 +216,6 @@ def capture_binding(
     return CaptureBinding(store=store, store_id=store_id, element_id=el_id)
 
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # High-level API: capture_graph / capture_element (wizard with form)
 # ═══════════════════════════════════════════════════════════════════════════

@@ -11,6 +11,8 @@ from pathlib import Path
 from dash import html
 
 _ASSETS_DIR = Path(__file__).parent / "assets"
+
+
 def html2canvas_script() -> html.Script:
     """Return a ``html.Script`` tag with the vendored html2canvas code.
 
