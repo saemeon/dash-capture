@@ -1,6 +1,6 @@
 # dash-capture
 
-Browser capture & custom renderer pipeline for Plotly Dash components.
+Plotly figures in Dash are rendered by JavaScript in the browser — the Python server never holds the chart as pixels. dash-capture bridges this gap by triggering the capture directly in the running browser, with no server-side headless browser (Chrome, Playwright, webshot2) required. The result is delivered to Python for post-processing, custom rendering, and download.
 
 ## Installation
 
@@ -8,20 +8,40 @@ Browser capture & custom renderer pipeline for Plotly Dash components.
 pip install dash-capture
 ```
 
-## Components
-
-| Component | Description |
-|-----------|-------------|
-| `capture_graph` | Capture wizard for `dcc.Graph` — modal with auto-generated fields, live preview, and PNG download |
-| `build_wizard` | Generic modal dialog |
-| `build_dropdown` | Generic anchored dropdown with click-outside-to-close |
-| `FromPlotly` | `FieldHook` that pre-fills a field from the live Plotly figure |
-| `FieldHook` | Base class for runtime field defaults derived from Dash component state |
-
-**Supported field types:** `str`, `int`, `float`, `bool`, `date`, `datetime`, `Literal[...]`, `list[T]`, `tuple[T, ...]`, `T | None`
-
 ## API Reference
 
-::: dash_capture.capture.capture_graph
+### capture_graph
 
 ::: dash_capture.capture.capture_graph
+
+### capture_element
+
+::: dash_capture.capture.capture_element
+
+### capture_binding
+
+::: dash_capture.capture.capture_binding
+
+### CaptureBinding
+
+::: dash_capture.capture.CaptureBinding
+
+### CaptureStrategy
+
+::: dash_capture.strategies.CaptureStrategy
+
+### plotly_strategy
+
+::: dash_capture.strategies.plotly_strategy
+
+### html2canvas_strategy
+
+::: dash_capture.strategies.html2canvas_strategy
+
+### canvas_strategy
+
+::: dash_capture.strategies.canvas_strategy
+
+### FromPlotly
+
+::: dash_capture.capture.FromPlotly

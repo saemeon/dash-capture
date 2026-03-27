@@ -10,7 +10,7 @@
 
 # dash-capture
 
-Browser capture & custom renderer pipeline for Plotly Dash components.
+Plotly figures in Dash are rendered by JavaScript in the browser — the Python server never holds the chart as pixels. dash-capture bridges this gap by triggering the capture directly in the running browser, with no server-side headless browser (Chrome, Playwright, webshot2) required. The result is delivered to Python for post-processing, custom rendering, and download.
 
 ## Installation
 
@@ -18,17 +18,86 @@ Browser capture & custom renderer pipeline for Plotly Dash components.
 pip install dash-capture
 ```
 
-## Components
+## Usage
 
-| Component | Description |
-|-----------|-------------|
-| `capture_graph` | Capture wizard for `dcc.Graph` — modal with auto-generated fields, live preview, and PNG download |
-| `build_wizard` | Generic modal dialog |
-| `build_dropdown` | Generic anchored dropdown with click-outside-to-close |
-| `FromPlotly` | `FieldHook` that pre-fills a field from the live Plotly figure |
-| `FieldHook` | Base class for runtime field defaults derived from Dash component state |
+### High-level — one-line wizard with form, preview, and download
 
-**Supported field types:** `str`, `int`, `float`, `bool`, `date`, `datetime`, `Literal[...]`, `list[T]`, `tuple[T, ...]`, `T | None`
+```python
+from dash_capture import capture_graph, plotly_strategy
+
+# Returns an html.Div — place it next to your dcc.Graph
+capture_graph(
+    graph="my-graph",
+    trigger="Export",
+    strip_title=True,
+    width=2400,
+    height=1600,
+)
+```
+
+Clicking the trigger opens a modal with editable fields, a live preview, and a download button.
+
+### Low-level — wire capture to your own UI
+
+```python
+from dash_capture import capture_binding, plotly_strategy
+
+binding = capture_binding(
+    "my-graph",
+    strategy=plotly_strategy(strip_title=True, width=2400),
+    trigger=Input("my-btn", "n_clicks"),
+)
+
+# Place binding.store in the layout
+# React to binding.store_id to get the base64 PNG
+```
+
+### Custom renderer
+
+```python
+def my_renderer(_target, _snapshot_img, title: str = ""):
+    """_target: file-like, _snapshot_img: callable → raw PNG bytes."""
+    png = _snapshot_img()
+    # post-process: add watermark, corporate frame, etc.
+    _target.write(png)
+
+capture_graph("my-graph", renderer=my_renderer)
+```
+
+## Strategies
+
+| Strategy | Method | Use case |
+|----------|--------|----------|
+| `plotly_strategy()` | `Plotly.toImage()` | Plotly charts — exact resolution |
+| `html2canvas_strategy()` | html2canvas | Any DOM element |
+| `canvas_strategy()` | `canvas.toDataURL()` | Raw `<canvas>` elements |
+
+Strip patches remove chart decorations before capture without touching the live chart:
+
+```python
+plotly_strategy(
+    strip_title=True,
+    strip_legend=True,
+    strip_margin=True,
+    width=2400,
+    height=1600,
+    format="png",   # or "jpeg", "webp", "svg"
+)
+```
+
+## Pre-filling fields from the live figure
+
+`FromPlotly` reads a value from the running Plotly figure to pre-populate form fields — no re-typing needed:
+
+```python
+from dash_capture import capture_graph, FromPlotly
+
+capture_graph(
+    "my-graph",
+    title=FromPlotly("layout.title.text"),   # reads current title
+    sources="Internal data",
+)
+```
 
 ## License
 
