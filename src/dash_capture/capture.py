@@ -263,7 +263,7 @@ def _build_modal_body(
         ],
     )
 
-    action_buttons = [
+    action_buttons: list[Any] = [
         html.Button(
             "Generate",
             id=generate_id,
@@ -272,7 +272,7 @@ def _build_modal_body(
         ),
     ]
 
-    action_buttons += [  # type: ignore[operator]
+    action_buttons += [
         dcc.Download(id=download_id),
         html.Div(
             style={"display": "flex", "gap": "4px"},
@@ -291,7 +291,7 @@ def _build_modal_body(
                 ),
             ],
         ),
-    ]  # ty:ignore[unsupported-operator]
+    ]
 
     return html.Div(
         style={"display": "flex", "gap": "24px"},
@@ -436,7 +436,7 @@ def _wire_wizard(
         _capture_states = [
             State(field_id(config_id, name), "value") for name in active_capture
         ]
-        capture_js = build_capture_js(element_id, strategy, active_capture, params)  # ty:ignore[invalid-argument-type]
+        capture_js = build_capture_js(element_id, strategy, active_capture, params)
 
         dash.clientside_callback(
             capture_js,

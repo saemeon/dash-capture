@@ -91,7 +91,7 @@ def _build_strip_patches(
     return patches
 
 
-def _build_plotly_preprocess(patches: list[str], params: dict) -> str | None:
+def _build_plotly_preprocess(patches: list[str], params: Mapping) -> str | None:
     """Build JS preprocess code that clones the Plotly figure into an offscreen div."""
     if not patches:
         return None
@@ -187,7 +187,7 @@ def plotly_strategy(
         strip_title, strip_legend, strip_annotations,
         strip_axis_titles, strip_colorbar, strip_margin,
     )
-    preprocess = _build_plotly_preprocess(patches, _params or {})  # ty:ignore[invalid-argument-type]
+    preprocess = _build_plotly_preprocess(patches, _params or {})
     capture = _PLOTLY_CAPTURE if preprocess else _PLOTLY_CAPTURE_SIMPLE
     return CaptureStrategy(preprocess=preprocess, capture=capture, format=format)
 
@@ -223,7 +223,7 @@ def build_capture_js(
     element_id: str,
     strategy: CaptureStrategy,
     active_capture: list[str],
-    params: dict,
+    params: Mapping,
 ) -> str:
     """Assemble a CaptureStrategy into a Dash clientside callback JS function.
 
