@@ -3,46 +3,32 @@
 
 """Tests for dash_capture._ids — unique ID generation."""
 
-from dash_capture._ids import _IdGenerator
+from dash_capture._ids import _new_id
 
 
-class TestIdGenerator:
-    def test_increments(self):
-        gen = _IdGenerator()
-        a = gen()
-        b = gen()
+class TestNewId:
+    def test_unique(self):
+        a = _new_id()
+        b = _new_id()
         assert a != b
 
     def test_format_without_prefix(self):
-        gen = _IdGenerator()
-        result = gen()
+        result = _new_id()
         assert result.startswith("_dcap_")
-        # No double underscore from empty prefix
-        assert "__" not in result
 
     def test_format_with_prefix(self):
-        gen = _IdGenerator()
-        result = gen("foo")
+        result = _new_id("foo")
         assert "_dcap_foo_" in result
 
-    def test_monotonic(self):
-        gen = _IdGenerator()
-        ids = [gen("x") for _ in range(5)]
-        # Extract trailing integer
-        nums = [int(i.rsplit("_", 1)[1]) for i in ids]
-        assert nums == sorted(nums)
-        assert len(set(nums)) == 5
+    def test_all_unique(self):
+        ids = [_new_id("x") for _ in range(20)]
+        assert len(set(ids)) == 20
 
     def test_unique_across_prefixes(self):
-        gen = _IdGenerator()
-        a = gen("alpha")
-        b = gen("beta")
+        a = _new_id("alpha")
+        b = _new_id("beta")
         assert a != b
 
-    def test_module_singleton(self):
-        from dash_capture._ids import id_generator
-
-        assert isinstance(id_generator, _IdGenerator)
-        # Calling it returns a string
-        result = id_generator("test")
-        assert isinstance(result, str)
+    def test_returns_string(self):
+        assert isinstance(_new_id(), str)
+        assert isinstance(_new_id("pfx"), str)

@@ -3,13 +3,11 @@
 
 """Tests for dash_capture.capture — core capture API."""
 
-import io
 
 from dash import dcc, html
 from dash_fn_form import FieldHook, FromComponent
 
 from dash_capture.capture import (
-    BatchBinding,
     CaptureBinding,
     FromPlotly,
     _get_nested,
@@ -119,17 +117,6 @@ class TestCaptureBinding:
         b2 = capture_binding("b")
         assert b1.store_id != b2.store_id
 
-
-# ---------------------------------------------------------------------------
-# BatchBinding
-# ---------------------------------------------------------------------------
-
-
-class TestBatchBinding:
-    def test_dataclass(self):
-        b = BatchBinding(stores=[], bindings={})
-        assert b.stores == []
-        assert b.bindings == {}
 
 
 # ---------------------------------------------------------------------------

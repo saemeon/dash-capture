@@ -3,15 +3,14 @@
 
 """Tests for dash_capture.mpl — matplotlib snapshot renderer."""
 
-import io
 import inspect
+import io
 
 import matplotlib
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 from dash_capture.mpl import snapshot_renderer
 

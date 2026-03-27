@@ -246,40 +246,20 @@ class TestBuildCaptureJs:
 # ---------------------------------------------------------------------------
 
 
-class TestBatchCapture:
-    def test_batch_creates_bindings(self):
-        from dash_capture import BatchBinding, capture_batch
+class TestMultipleBindings:
+    def test_multiple_bindings_unique_store_ids(self):
+        from dash_capture import capture_binding
 
-        batch = capture_batch(["g1", "g2", "g3"])
-        assert isinstance(batch, BatchBinding)
-        assert len(batch.stores) == 3
-        assert len(batch.bindings) == 3
-        assert "g1" in batch.bindings
-        assert "g2" in batch.bindings
-        assert "g3" in batch.bindings
+        b1 = capture_binding("a")
+        b2 = capture_binding("b")
+        assert b1.store_id != b2.store_id
 
-    def test_batch_store_ids_unique(self):
-        from dash_capture import capture_batch
+    def test_multiple_bindings_with_strategy(self):
+        from dash_capture import capture_binding
 
-        batch = capture_batch(["a", "b"])
-        ids = [b.store_id for b in batch.bindings.values()]
-        assert len(set(ids)) == 2  # all unique
-
-    def test_batch_with_strategy(self):
-        from dash_capture import capture_batch
-
-        batch = capture_batch(
-            ["x", "y"],
-            strategy=plotly_strategy(strip_title=True),
-        )
-        assert len(batch.bindings) == 2
-
-    def test_batch_empty_list(self):
-        from dash_capture import capture_batch
-
-        batch = capture_batch([])
-        assert len(batch.stores) == 0
-        assert len(batch.bindings) == 0
+        b1 = capture_binding("x", strategy=plotly_strategy(strip_title=True))
+        b2 = capture_binding("y", strategy=plotly_strategy(strip_title=True))
+        assert b1.store_id != b2.store_id
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +277,4 @@ def test_import():
     assert hasattr(dash_capture, "capture_element")
     assert hasattr(dash_capture, "capture_graph")
     assert hasattr(dash_capture, "capture_binding")
-    assert hasattr(dash_capture, "capture_batch")
     assert hasattr(dash_capture, "CaptureBinding")
-    assert hasattr(dash_capture, "BatchBinding")
