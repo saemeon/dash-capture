@@ -16,7 +16,7 @@ from __future__ import annotations
 import base64
 import inspect
 import io
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -24,7 +24,7 @@ import dash
 from dash import Input, Output, State, dcc, html
 from dash_fn_form import Field, FieldHook, FnForm, FromComponent, field_id
 
-from dash_capture._ids import id_generator
+from dash_capture._ids import _new_id
 from dash_capture.dropdown import build_dropdown
 from dash_capture.strategies import (
     _HTML2CANVAS_CAPTURE,
@@ -181,7 +181,7 @@ def capture_binding(
     if strategy is None:
         strategy = plotly_strategy()
 
-    uid = id_generator(el_id)
+    uid = _new_id(el_id)
     store_id = f"_dcap_store_{uid}"
     store = dcc.Store(id=store_id)
 
@@ -197,79 +197,6 @@ def capture_binding(
 
     return CaptureBinding(store=store, store_id=store_id, element_id=el_id)
 
-
-@dataclass
-class BatchBinding:
-    """Return value of :func:`capture_batch`.
-
-    Attributes
-    ----------
-    stores :
-        List of ``dcc.Store`` components — place all in your layout.
-    bindings :
-        Dict mapping element IDs to their :class:`CaptureBinding`.
-    """
-
-    stores: list[dcc.Store]
-    bindings: dict[str, CaptureBinding]
-
-
-def capture_batch(
-    elements: list[str | Any],
-    strategy: CaptureStrategy | None = None,
-    trigger: Input | None = None,
-) -> BatchBinding:
-    """Capture multiple elements with a single trigger.
-
-    Creates one :class:`CaptureBinding` per element, all armed by the
-    same trigger. The user processes each element's result independently.
-
-    Parameters
-    ----------
-    elements :
-        List of Dash components or string IDs to capture.
-    strategy :
-        Shared capture strategy. Defaults to ``plotly_strategy()``.
-    trigger :
-        A Dash ``Input`` that triggers all captures simultaneously.
-
-    Returns
-    -------
-    BatchBinding
-        ``.stores`` — list of ``dcc.Store`` to place in layout.
-        ``.bindings`` — dict of ``{element_id: CaptureBinding}``.
-
-    Example::
-
-        batch = capture_batch(
-            ["graph-1", "graph-2", "graph-3"],
-            trigger=Input("capture-all", "n_clicks"),
-        )
-        app.layout = html.Div([
-            *graphs,
-            *batch.stores,
-            html.Button("Capture all", id="capture-all"),
-        ])
-
-        @app.callback(
-            Output("results", "children"),
-            [Input(b.store_id, "data") for b in batch.bindings.values()],
-            prevent_initial_call=True,
-        )
-        def on_batch(*base64_images):
-            # Process all captured images
-            ...
-    """
-    bindings: dict[str, CaptureBinding] = {}
-    stores: list[dcc.Store] = []
-
-    for element in elements:
-        binding = capture_binding(element, strategy=strategy, trigger=trigger)
-        el_id = binding.element_id
-        bindings[el_id] = binding
-        stores.append(binding.store)
-
-    return BatchBinding(stores=stores, bindings=bindings)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -327,7 +254,7 @@ def _build_modal_body(
         ),
     ]
 
-    action_buttons += [
+    action_buttons += [  # type: ignore[operator]
         dcc.Download(id=download_id),
         html.Div(
             style={"display": "flex", "gap": "4px"},
@@ -346,7 +273,7 @@ def _build_modal_body(
                 ),
             ],
         ),
-    ]
+    ]  # ty:ignore[unsupported-operator]
 
     return html.Div(
         style={"display": "flex", "gap": "24px"},
@@ -394,7 +321,7 @@ def _wire_wizard(
     has_snapshot: bool,
     has_fig_data: bool,
     active_capture: list[str],
-    params: dict,
+    params: Mapping,
     ids: dict[str, str],
     trigger: str | Any,
     filename: str,
@@ -491,7 +418,7 @@ def _wire_wizard(
         _capture_states = [
             State(field_id(config_id, name), "value") for name in active_capture
         ]
-        capture_js = build_capture_js(element_id, strategy, active_capture, params)
+        capture_js = build_capture_js(element_id, strategy, active_capture, params)  # ty:ignore[invalid-argument-type]
 
         dash.clientside_callback(
             capture_js,
@@ -684,7 +611,7 @@ def _make_wizard(
     _styles = styles or {}
     _class_names = class_names or {}
 
-    uid = id_generator(element_id)
+    uid = _new_id(element_id)
     ids = {
         k: f"_dcap_{k}_{uid}"
         for k in (

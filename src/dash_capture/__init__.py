@@ -11,10 +11,8 @@ except PackageNotFoundError:
 
 
 from dash_capture.capture import (
-    BatchBinding,
     CaptureBinding,
     FromPlotly,
-    capture_batch,
     capture_binding,
     capture_element,
     capture_graph,
@@ -28,9 +26,7 @@ from dash_capture.strategies import (
 
 __all__ = [
     # low-level
-    "BatchBinding",
     "CaptureBinding",
-    "capture_batch",
     "capture_binding",
     # high-level (wizard)
     "capture_graph",

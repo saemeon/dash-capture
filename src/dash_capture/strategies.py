@@ -17,6 +17,7 @@ The JS fragments here are intentionally kept in sync with
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 
@@ -170,7 +171,7 @@ def plotly_strategy(
     strip_colorbar: bool = False,
     strip_margin: bool = False,
     format: str = "png",
-    _params: dict | None = None,
+    _params: Mapping | None = None,
 ) -> CaptureStrategy:
     """Plotly.toImage() strategy with optional strip patches.
 
@@ -186,7 +187,7 @@ def plotly_strategy(
         strip_title, strip_legend, strip_annotations,
         strip_axis_titles, strip_colorbar, strip_margin,
     )
-    preprocess = _build_plotly_preprocess(patches, _params or {})
+    preprocess = _build_plotly_preprocess(patches, _params or {})  # ty:ignore[invalid-argument-type]
     capture = _PLOTLY_CAPTURE if preprocess else _PLOTLY_CAPTURE_SIMPLE
     return CaptureStrategy(preprocess=preprocess, capture=capture, format=format)
 
