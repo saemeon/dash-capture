@@ -25,14 +25,14 @@ fig = go.Figure(
             marker_color="#e94560",
         ),
     ],
-    layout=dict(
-        title="Quarterly Revenue (CHF M)",
-        xaxis_title="",
-        yaxis_title="Revenue (CHF M)",
-        barmode="group",
-        width=700,
-        height=400,
-    ),
+    layout={
+        "title": "Quarterly Revenue (CHF M)",
+        "xaxis_title": "",
+        "yaxis_title": "Revenue (CHF M)",
+        "barmode": "group",
+        "width": 700,
+        "height": 400,
+    },
 )
 
 graph = dcc.Graph(id="revenue", figure=fig)

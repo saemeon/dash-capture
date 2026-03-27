@@ -25,14 +25,14 @@ fig = go.Figure(
             x=[1, 2, 3, 4, 5], y=[1, 3, 6, 4, 7], mode="lines+markers", name="Series B"
         ),
     ],
-    layout=dict(
-        title="Sample Chart",
-        xaxis_title="X",
-        yaxis_title="Y",
-        width=700,
-        height=400,
-        showlegend=True,
-    ),
+    layout={
+        "title": "Sample Chart",
+        "xaxis_title": "X",
+        "yaxis_title": "Y",
+        "width": 700,
+        "height": 400,
+        "showlegend": True,
+    },
 )
 graph = dcc.Graph(id="demo-graph", figure=fig)
 
