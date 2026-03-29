@@ -44,7 +44,7 @@ def _to_json(kwargs: dict) -> str:
     for k, v in kwargs.items():
         if isinstance(v, Enum):
             out[k] = f"{type(v).__name__}.{v.name}  (value={v.value!r})"
-        elif isinstance(v, (datetime, date)):
+        elif isinstance(v, datetime | date):
             out[k] = v.isoformat()
         elif isinstance(v, pathlib.Path):
             out[k] = str(v)
