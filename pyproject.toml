@@ -75,6 +75,9 @@ dash_capture = ["py.typed", "assets/*.js"]
 testpaths = ["tests"]
 addopts = "--cov=src --cov-report=term-missing"
 
+[tool.ty.src]
+include = ["src"]
+
 [tool.mypy]
 ignore_missing_imports = true
 
