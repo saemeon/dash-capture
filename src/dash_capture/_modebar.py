@@ -130,7 +130,7 @@ def _build_inject_js(
     function(figure) {{
         var gid = '{safe_gid}';
         var bid = '{safe_bid}';
-        setTimeout(function() {{
+        function inject() {{
             var el = document.getElementById(gid);
             if (!el) return;
             var groups = el.querySelectorAll('.modebar-group');
@@ -152,6 +152,10 @@ def _build_inject_js(
             }};
             newGroup.appendChild(btn);
             bar.appendChild(newGroup);
+        }}
+        var iv = setInterval(function() {{ inject();
+            var el = document.getElementById(gid);
+            if (el && el.querySelector('[data-dcap-id="' + bid + '"]')) clearInterval(iv);
         }}, 200);
         return window.dash_clientside.no_update;
     }}
