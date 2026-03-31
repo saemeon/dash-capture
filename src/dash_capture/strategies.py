@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -228,6 +229,9 @@ def build_capture_js(
     strategy: CaptureStrategy,
     active_capture: list[str],
     params: Mapping,
+    *,
+    fixed_capture: dict[str, Any] | None = None,
+    from_resolved: bool = False,
 ) -> str:
     """Assemble a CaptureStrategy into a Dash clientside callback JS function.
 
@@ -238,26 +242,57 @@ def build_capture_js(
     strategy :
         The capture strategy (preprocess + capture JS fragments).
     active_capture :
-        Parameter names starting with ``capture_`` that map to Plotly.toImage
-        options (e.g. ``capture_width`` → ``width``).
+        Parameter names starting with ``capture_`` that are read from form
+        State components at runtime (dynamic values).
+        Ignored when ``from_resolved`` is ``True``.
     params :
         The renderer's ``inspect.signature().parameters`` dict.
+    fixed_capture :
+        Parameter names starting with ``capture_`` whose values are constants
+        (from ``fixed()``). These are inlined directly in the JS.
+        Ignored when ``from_resolved`` is ``True``.
+    from_resolved :
+        When ``True``, the JS function reads capture options from a
+        ``resolved_data`` dict (first argument) instead of individual
+        State components. Used with ``capture_resolver``.
     """
-    js_args = ", ".join(["n_clicks", "n_intervals", "fmt", *active_capture])
-    js_build_opts = "\n                ".join(
-        f"if ({p} != null) opts.{p[len('capture_') :]} = {p};" for p in active_capture
-    )
+    if from_resolved:
+        js_args = "resolved_data, fmt"
+        js_build_opts = """if (resolved_data) {
+                    Object.keys(resolved_data).forEach(function(k) {
+                        var key = k.startsWith('capture_') ? k.slice(8) : k;
+                        opts[key] = resolved_data[k];
+                    });
+                }"""
+    else:
+        js_args = ", ".join(["n_clicks", "n_intervals", "fmt", *active_capture])
+        # Dynamic capture params — read from callback State args
+        opt_lines: list[str] = [
+            f"if ({p} != null) opts.{p[len('capture_') :]} = {p};"
+            for p in active_capture
+        ]
+        # Fixed capture params — inlined as constants
+        opt_lines += [
+            f"opts.{p[len('capture_') :]} = {v!r};"
+            for p, v in (fixed_capture or {}).items()
+            if v is not None
+        ]
+        js_build_opts = "\n                ".join(opt_lines)
 
     # Element lookup — Plotly-aware (look for .js-plotly-plot inside container)
     # For non-Plotly strategies, graphDiv === el which is fine.
     # Escape element_id to prevent JS injection via crafted component IDs
     safe_id = element_id.replace("\\", "\\\\").replace("'", "\\'")
 
+    guard = (
+        "if (!resolved_data) { return window.dash_clientside.no_update; }"
+        if from_resolved
+        else "if (!n_clicks && !n_intervals) { return window.dash_clientside.no_update; }"
+    )
+
     js_head = f"""
             async function({js_args}) {{
-                if (!n_clicks && !n_intervals) {{
-                    return window.dash_clientside.no_update;
-                }}
+                {guard}
                 const el = document.getElementById('{safe_id}');
                 if (!el) return window.dash_clientside.no_update;
                 const graphDiv =

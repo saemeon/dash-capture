@@ -29,9 +29,11 @@ from typing import Any, cast
 import dash
 from dash import Input, Output, State, dcc, html
 from dash_fn_form import Field, FieldHook, FnForm, FromComponent, field_id
+from dash_fn_form._spec import _FieldFixed
 
 from dash_capture._dropdown import build_dropdown
 from dash_capture._ids import _new_id
+from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
 from dash_capture._wizard import build_wizard
 from dash_capture.strategies import (
     _HTML2CANVAS_CAPTURE,
@@ -234,6 +236,7 @@ def _build_modal_body(
     has_fields,
     styles,
     class_names,
+    resolved_store_id: str | None = None,
 ) -> html.Div:
     # Always include Generate button in DOM (callbacks reference it),
     # but hide it when there are no form fields to configure.
@@ -325,6 +328,7 @@ def _build_modal_body(
                 disabled=True,
             ),
             dcc.Store(id=snapshot_store_id),
+            *([] if resolved_store_id is None else [dcc.Store(id=resolved_store_id)]),
         ],
     )
 
@@ -345,6 +349,8 @@ def _wire_wizard(
     autogenerate: bool,
     styles: dict,
     class_names: dict,
+    field_specs: dict[str, Any] | None = None,
+    capture_resolver: Callable | None = None,
 ) -> html.Div:
     """Wire the full wizard: modal + capture JS + preview/download callbacks."""
     config_id = ids["cfg"]
@@ -360,6 +366,7 @@ def _wire_wizard(
     autogenerate_id = ids["autogen"]
     snapshot_store_id = ids["snapshot"]
     format_id = ids["format"]
+    resolved_store_id = ids.get("resolved")
     has_fields = bool(config.states)
 
     menu = build_dropdown(
@@ -400,6 +407,7 @@ def _wire_wizard(
         has_fields,
         styles,
         class_names,
+        resolved_store_id=resolved_store_id,
     )
 
     wizard = build_wizard(
@@ -432,20 +440,68 @@ def _wire_wizard(
         return (not is_open, 0)
 
     if has_snapshot:
-        _capture_states = [
-            State(field_id(config_id, name), "value") for name in active_capture
-        ]
-        capture_js = build_capture_js(element_id, strategy, active_capture, params)
+        if capture_resolver is not None:
+            # Two-step flow: server resolves capture opts, then JS captures.
+            assert resolved_store_id is not None
 
-        dash.clientside_callback(
-            capture_js,
-            Output(snapshot_store_id, "data"),
-            Input(generate_id, "n_clicks"),
-            Input(interval_id, "n_intervals"),
-            State(format_id, "value"),
-            *_capture_states,
-            prevent_initial_call=True,
-        )
+            @dash.callback(
+                Output(resolved_store_id, "data"),
+                Input(generate_id, "n_clicks"),
+                Input(interval_id, "n_intervals"),
+                *config.states,
+                prevent_initial_call=True,
+            )
+            def resolve_capture(n_clicks, n_intervals, *field_values):
+                if not n_clicks and not n_intervals:
+                    return dash.no_update
+                kwargs = config.build_kwargs(tuple(field_values))
+                return capture_resolver(**kwargs)
+
+            capture_js = build_capture_js(
+                element_id,
+                strategy,
+                [],
+                params,
+                from_resolved=True,
+            )
+            dash.clientside_callback(
+                capture_js,
+                Output(snapshot_store_id, "data"),
+                Input(resolved_store_id, "data"),
+                State(format_id, "value"),
+                prevent_initial_call=True,
+            )
+        else:
+            # Direct flow: JS reads capture params from form State.
+            fixed_capture: dict[str, Any] = {}
+            dynamic_capture: list[str] = []
+            for name in active_capture:
+                spec = (field_specs or {}).get(name)
+                if isinstance(spec, _FieldFixed):
+                    fixed_capture[name] = spec.value
+                else:
+                    dynamic_capture.append(name)
+
+            _capture_states = [
+                State(field_id(config_id, name), "value") for name in dynamic_capture
+            ]
+            capture_js = build_capture_js(
+                element_id,
+                strategy,
+                dynamic_capture,
+                params,
+                fixed_capture=fixed_capture,
+            )
+
+            dash.clientside_callback(
+                capture_js,
+                Output(snapshot_store_id, "data"),
+                Input(generate_id, "n_clicks"),
+                Input(interval_id, "n_intervals"),
+                State(format_id, "value"),
+                *_capture_states,
+                prevent_initial_call=True,
+            )
 
         _fig_states = [State(element_id, "figure")] if has_fig_data else []
 
@@ -603,6 +659,7 @@ def _make_wizard(
     class_names: dict | None,
     field_specs: dict[str, Field | FieldHook] | None,
     field_components: Any,
+    capture_resolver: Callable | None = None,
 ) -> html.Div:
     """Shared implementation for capture_graph and capture_element."""
     if preprocess is not None:
@@ -629,24 +686,24 @@ def _make_wizard(
     _class_names = class_names or {}
 
     uid = _new_id(element_id)
-    ids = {
-        k: f"_dcap_{k}_{uid}"
-        for k in (
-            "cfg",
-            "wiz",
-            "preview",
-            "generate",
-            "download",
-            "copy",
-            "error",
-            "interval",
-            "restore",
-            "menu",
-            "autogen",
-            "snapshot",
-            "format",
-        )
-    }
+    id_keys = [
+        "cfg",
+        "wiz",
+        "preview",
+        "generate",
+        "download",
+        "copy",
+        "error",
+        "interval",
+        "restore",
+        "menu",
+        "autogen",
+        "snapshot",
+        "format",
+    ]
+    if capture_resolver is not None:
+        id_keys.append("resolved")
+    ids = {k: f"_dcap_{k}_{uid}" for k in id_keys}
 
     config = FnForm(
         ids["cfg"],
@@ -659,7 +716,24 @@ def _make_wizard(
         _field_components=field_components,
     )
 
-    return _wire_wizard(
+    # --- modebar trigger: inject button into Plotly modebar via JS -----------
+    modebar_bridge = None
+    if trigger == "modebar" or isinstance(trigger, ModebarButton | ModebarIcon):
+        if isinstance(trigger, ModebarButton):
+            mb = trigger
+        elif isinstance(trigger, ModebarIcon):
+            mb = ModebarButton(icon=trigger)
+        else:
+            mb = ModebarButton()
+        bridge_id = f"_dcap_modebar_{uid}"
+        modebar_bridge = add_modebar_button(
+            element_id,
+            bridge_id,
+            button=mb,
+        )
+        trigger = modebar_bridge  # wizard listens to bridge.n_clicks
+
+    wizard_div = _wire_wizard(
         element_id=element_id,
         strategy=strategy,
         renderer=renderer,
@@ -674,7 +748,14 @@ def _make_wizard(
         autogenerate=autogenerate,
         styles=_styles,
         class_names=_class_names,
+        field_specs=field_specs,
+        capture_resolver=capture_resolver,
     )
+
+    # Include the bridge div in the layout so Dash can find it.
+    if modebar_bridge is not None:
+        return html.Div([modebar_bridge, wizard_div])
+    return wizard_div
 
 
 # ---------------------------------------------------------------------------
@@ -701,6 +782,7 @@ def capture_graph(
     class_names: dict | None = None,
     field_specs: dict[str, Field | FieldHook] | None = None,
     field_components: Any = "dcc",
+    capture_resolver: Callable | None = None,
 ) -> html.Div:
     """Capture wizard for a ``dcc.Graph``.
 
@@ -753,6 +835,12 @@ def capture_graph(
     field_components :
         Component factory for form fields: ``"dcc"`` (default),
         ``"dmc"`` (Mantine), ``"dbc"`` (Bootstrap), or a custom callable.
+    capture_resolver :
+        Optional callable that computes capture options at runtime.
+        Receives the current form field values as kwargs, returns a dict
+        of ``capture_*`` options (e.g. ``{"capture_width": 520}``).
+        The resolver runs server-side before the browser captures, allowing
+        capture dimensions to depend on user-editable form values.
     """
     if renderer is _UNSET:
         from dash_capture.mpl import snapshot_renderer
@@ -786,6 +874,7 @@ def capture_graph(
         class_names,
         field_specs,
         field_components,
+        capture_resolver=capture_resolver,
     )
 
 
@@ -802,6 +891,7 @@ def capture_element(
     class_names: dict | None = None,
     field_specs: dict[str, Field | FieldHook] | None = None,
     field_components: Any = "dcc",
+    capture_resolver: Callable | None = None,
 ) -> html.Div:
     """Capture wizard for any Dash component.
 
@@ -818,6 +908,9 @@ def capture_element(
     field_components :
         Component factory: ``"dcc"`` (default), ``"dmc"``, ``"dbc"``,
         or a custom callable.
+    capture_resolver :
+        Optional callable that computes capture options at runtime.
+        See :func:`capture_graph` for details.
     """
     if renderer is _UNSET:
         from dash_capture.mpl import snapshot_renderer
@@ -842,6 +935,7 @@ def capture_element(
         class_names,
         field_specs,
         field_components,
+        capture_resolver=capture_resolver,
     )
 
     # Auto-include vendored html2canvas.min.js if using html2canvas strategy
