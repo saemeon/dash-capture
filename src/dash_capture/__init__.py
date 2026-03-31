@@ -10,6 +10,7 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
+from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
@@ -36,6 +37,10 @@ __all__ = [
     "plotly_strategy",
     "html2canvas_strategy",
     "canvas_strategy",
+    # modebar
+    "add_modebar_button",
+    "ModebarButton",
+    "ModebarIcon",
     # hooks
     "FromPlotly",
 ]
