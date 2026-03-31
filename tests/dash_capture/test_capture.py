@@ -6,12 +6,11 @@
 from dash import dcc, html
 from dash_fn_form import FieldHook, FromComponent
 
+from dash_capture._wizard_callbacks import _make_snapshot_fn, _to_src
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
     _get_nested,
-    _make_snapshot_fn,
-    _to_src,
     capture_binding,
     capture_graph,
 )

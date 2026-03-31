@@ -1,33 +1,22 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""Low-level and high-level capture APIs for Dash components.
-
-Two API levels:
-
-- **Low-level** -- :class:`CaptureBinding` wires JS capture to a ``dcc.Store``.
-- **High-level** -- :func:`capture_graph` / :func:`capture_element` add a full
-  wizard with auto-generated form, live preview, and download.
-"""
+"""Public capture APIs: ``capture_graph``, ``capture_element``, ``capture_binding``."""
 
 from __future__ import annotations
 
-import base64
 import inspect
-import io
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
 import dash
-from dash import Input, Output, State, dcc, html
-from dash_fn_form import Field, FieldHook, FnForm, FromComponent, field_id
-from dash_fn_form._spec import _FieldFixed
+from dash import Input, Output, dcc, html
+from dash_fn_form import Field, FieldHook, FnForm, FromComponent
 
-from dash_capture._dropdown import build_dropdown
 from dash_capture._ids import _new_id
 from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
-from dash_capture._wizard import build_wizard
+from dash_capture._wizard_callbacks import wire_wizard
 from dash_capture.strategies import (
     _HTML2CANVAS_CAPTURE,
     CaptureStrategy,
@@ -43,9 +32,6 @@ from dash_capture.strategies import (
 
 class FromPlotly(FromComponent):
     """Pre-populate a form field from the live Plotly figure.
-
-    Reads a value from the running figure when the wizard opens, so the
-    user does not have to retype it.
 
     Parameters
     ----------
@@ -73,44 +59,6 @@ class FromPlotly(FromComponent):
         return _get_nested(figure, self.path)
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-_UNSET: Callable = cast(Callable, object())
-
-
-def _make_snapshot_fn(img_b64: str) -> Callable[[], bytes]:
-    def _snapshot_img() -> bytes:
-        b64 = img_b64.split(",", 1)[1]
-        return base64.b64decode(b64)
-
-    return _snapshot_img
-
-
-def _call_renderer(
-    renderer: Callable,
-    has_fig_data: bool,
-    has_snapshot: bool,
-    fig_data: dict,
-    img_b64: str,
-    kwargs: dict,
-) -> bytes:
-    buf = io.BytesIO()
-    call_kwargs = dict(kwargs)
-    if has_fig_data:
-        call_kwargs["_fig_data"] = fig_data
-    if has_snapshot:
-        call_kwargs["_snapshot_img"] = _make_snapshot_fn(img_b64)
-    renderer(buf, **call_kwargs)
-    buf.seek(0)
-    return buf.read()
-
-
-def _to_src(data: bytes) -> str:
-    return "data:image/png;base64," + base64.b64encode(data).decode()
-
-
 def _get_nested(data: Any, path: str) -> Any:
     for key in path.split("."):
         if not isinstance(data, dict):
@@ -121,24 +69,23 @@ def _get_nested(data: Any, path: str) -> Any:
     return data
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
 # Low-level API: CaptureBinding
-# ═══════════════════════════════════════════════════════════════════════════
+# ---------------------------------------------------------------------------
+
+_UNSET: Callable = cast(Callable, object())
 
 
 @dataclass
 class CaptureBinding:
-    """Low-level capture wiring: JS capture to ``dcc.Store``.
-
-    Place ``.store`` in your layout and read the base64 result from
-    ``State(binding.store_id, "data")``.
+    """Low-level capture wiring: JS capture → ``dcc.Store``.
 
     Attributes
     ----------
     store : dcc.Store
         Component to place in your layout.
     store_id : str
-        The store's component ID for use in ``State(store_id, "data")``.
+        The store's component ID.
     element_id : str
         The captured element's DOM ID.
 
@@ -166,20 +113,13 @@ def capture_binding(
     element : str or Dash component
         A Dash component with an ``id``, or a string ID.
     strategy : CaptureStrategy, optional
-        Capture strategy. Defaults to ``plotly_strategy()``.
+        Defaults to ``plotly_strategy()``.
     trigger : Input, optional
-        Dash ``Input`` that triggers the capture. If ``None``, you must
-        wire the clientside callback yourself.
+        Dash ``Input`` that triggers the capture.
 
     Returns
     -------
     CaptureBinding
-
-    Examples
-    --------
-    >>> from dash import Input
-    >>> from dash_capture import capture_binding
-    >>> binding = capture_binding("my-graph", trigger=Input("btn", "n_clicks"))
     """
     el_id = element if isinstance(element, str) else cast(Any, element).id
 
@@ -196,480 +136,16 @@ def capture_binding(
             capture_js,
             Output(store_id, "data"),
             trigger,
-            Input(f"_dcap_dummy_{uid}", "n_intervals"),  # unused but required
+            Input(f"_dcap_dummy_{uid}", "n_intervals"),
             prevent_initial_call=True,
         )
 
     return CaptureBinding(store=store, store_id=store_id, element_id=el_id)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# High-level API: capture_graph / capture_element (wizard with form)
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def _build_modal_body(
-    config_div,
-    generate_id,
-    download_id,
-    preview_id,
-    copy_id,
-    error_id,
-    interval_id,
-    snapshot_store_id,
-    format_id,
-    has_fields,
-    styles,
-    class_names,
-    resolved_store_id: str | None = None,
-    show_format: bool = True,
-) -> html.Div:
-    # Always include Generate button in DOM (callbacks reference it),
-    # but hide it when there are no form fields to configure.
-    gen_style = dict(styles.get("button") or {})
-    if not has_fields:
-        gen_style["display"] = "none"
-
-    fmt_style = {"display": "flex", "alignItems": "center", "gap": "6px"}
-    if not show_format:
-        fmt_style["display"] = "none"
-    format_selector = html.Div(
-        style=fmt_style,
-        children=[
-            html.Label("Format:", style={"fontSize": "12px", "color": "#888"}),
-            dcc.Dropdown(
-                id=format_id,
-                options=[
-                    {"label": "PNG", "value": "png"},
-                    {"label": "JPEG", "value": "jpeg"},
-                    {"label": "WebP", "value": "webp"},
-                    {"label": "SVG", "value": "svg"},
-                ],
-                value="png",
-                clearable=False,
-                style={"width": "100px", "fontSize": "12px"},
-                persistence=True,
-                persistence_type="session",
-            ),
-        ],
-    )
-
-    generate_btn = html.Button(
-        "Generate",
-        id=generate_id,
-        style=gen_style,
-        className=class_names.get("button", ""),
-    )
-
-    return html.Div(
-        style={"display": "flex", "flexDirection": "column", "gap": "12px"},
-        children=[
-            # Top: config | preview
-            html.Div(
-                style={"display": "flex", "gap": "24px"},
-                children=[
-                    html.Div(
-                        style={
-                            "display": "flex",
-                            "flexDirection": "column",
-                            "gap": "8px",
-                            "minWidth": "160px",
-                        },
-                        children=[config_div, format_selector],
-                    ),
-                    html.Div(
-                        style={
-                            "position": "relative",
-                            "minWidth": "300px",
-                            "minHeight": "200px",
-                        },
-                        children=[
-                            dcc.Loading(
-                                type="circle",
-                                children=[
-                                    html.Img(id=preview_id, style={"maxWidth": "400px"})
-                                ],
-                            ),
-                            html.Div(
-                                id=error_id,
-                                style={
-                                    "color": "red",
-                                    "fontSize": "13px",
-                                    "marginTop": "8px",
-                                },
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-            # Bottom: generate | download + copy
-            html.Div(
-                style={
-                    "display": "flex",
-                    "justifyContent": "space-between",
-                    "alignItems": "center",
-                },
-                children=[
-                    generate_btn,
-                    html.Div(
-                        style={"display": "flex", "gap": "6px"},
-                        children=[
-                            html.Button(
-                                "Download",
-                                id=f"{download_id}_btn",
-                                style=styles.get("button"),
-                                className=class_names.get("button", ""),
-                            ),
-                            html.Button(
-                                "Copy",
-                                id=copy_id,
-                                style=styles.get("button"),
-                                className=class_names.get("button", ""),
-                            ),
-                            dcc.Download(id=download_id),
-                        ],
-                    ),
-                ],
-            ),
-            # Hidden infra
-            dcc.Interval(
-                id=interval_id,
-                interval=500,
-                n_intervals=0,
-                max_intervals=1,
-                disabled=True,
-            ),
-            dcc.Store(id=snapshot_store_id),
-            *([] if resolved_store_id is None else [dcc.Store(id=resolved_store_id)]),
-        ],
-    )
-
-
-def _wire_wizard(
-    *,
-    element_id: str,
-    strategy: CaptureStrategy,
-    renderer: Callable,
-    config: FnForm,
-    has_snapshot: bool,
-    has_fig_data: bool,
-    active_capture: list[str],
-    params: Mapping,
-    ids: dict[str, str],
-    trigger: str | Any,
-    filename: str,
-    autogenerate: bool,
-    styles: dict,
-    class_names: dict,
-    field_specs: dict[str, Any] | None = None,
-    capture_resolver: Callable | None = None,
-    show_format: bool = True,
-) -> html.Div:
-    """Wire the full wizard: modal, capture JS, preview, and download callbacks."""
-    config_id = ids["cfg"]
-    wizard_id = ids["wiz"]
-    preview_id = ids["preview"]
-    generate_id = ids["generate"]
-    download_id = ids["download"]
-    copy_id = ids["copy"]
-    error_id = ids["error"]
-    interval_id = ids["interval"]
-    restore_id = ids["restore"]
-    menu_id = ids["menu"]
-    autogenerate_id = ids["autogen"]
-    snapshot_store_id = ids["snapshot"]
-    format_id = ids["format"]
-    resolved_store_id = ids.get("resolved")
-    has_fields = bool(config.states)
-
-    menu = build_dropdown(
-        menu_id,
-        trigger_label="···",
-        close_inputs=[Input(restore_id, "n_clicks")],
-        styles=styles,
-        class_names=class_names,
-        children=[
-            html.Button(
-                "Reset to defaults",
-                id=restore_id,
-                style=styles.get("button"),
-                className=class_names.get("button", ""),
-            ),
-            dcc.Checklist(
-                id=autogenerate_id,
-                options=[{"label": " Auto-generate", "value": "auto"}],
-                value=["auto"] if autogenerate else [],
-                style={"padding": "4px 8px"},
-                labelStyle={
-                    k: v for k, v in (styles.get("label") or {}).items() if k == "color"
-                },
-            ),
-        ],
-    )
-
-    body = _build_modal_body(
-        config,
-        generate_id,
-        download_id,
-        preview_id,
-        copy_id,
-        error_id,
-        interval_id,
-        snapshot_store_id,
-        format_id,
-        has_fields,
-        styles,
-        class_names,
-        resolved_store_id=resolved_store_id,
-        show_format=show_format,
-    )
-
-    wizard = build_wizard(
-        wizard_id,
-        body,
-        trigger=trigger,
-        title="Capture",
-        header_actions=menu,
-        dialog_style=styles.get("dialog"),
-        dialog_class_name=class_names.get("dialog", ""),
-        title_style=styles.get("title"),
-        close_style=styles.get("close"),
-    )
-    config.register_populate_callback(wizard.open_input)
-    config.register_restore_callback(Input(restore_id, "n_clicks"))
-
-    dash.clientside_callback(
-        "function(v) { return v != null && v.length > 0; }",
-        Output(generate_id, "disabled"),
-        Input(autogenerate_id, "value"),
-    )
-
-    @dash.callback(
-        Output(interval_id, "disabled"),
-        Output(interval_id, "n_intervals"),
-        wizard.open_input,
-        prevent_initial_call=True,
-    )
-    def arm_interval(is_open):
-        return (not is_open, 0)
-
-    if has_snapshot:
-        if capture_resolver is not None:
-            # Two-step flow: server resolves capture opts, then JS captures.
-            assert resolved_store_id is not None
-
-            # config.states as Inputs (not State) so that field changes
-            # (e.g. figsize dropdown) trigger a re-resolve + re-capture.
-            _resolve_inputs = [
-                Input(s.component_id, s.component_property) for s in config.states
-            ]
-
-            @dash.callback(
-                Output(resolved_store_id, "data"),
-                Input(generate_id, "n_clicks"),
-                Input(interval_id, "n_intervals"),
-                *_resolve_inputs,
-                State(autogenerate_id, "value"),
-                State(snapshot_store_id, "data"),
-                prevent_initial_call=True,
-            )
-            def resolve_capture(n_clicks, n_intervals, *args):
-                *field_values, autogen, snapshot = args
-                is_generate = dash.ctx.triggered_id in (
-                    generate_id,
-                    interval_id,
-                )
-                is_field_change = not is_generate
-                if is_field_change and (not autogen or not snapshot):
-                    return dash.no_update
-                kwargs = config.build_kwargs(tuple(field_values))
-                return capture_resolver(**kwargs)
-
-            capture_js = build_capture_js(
-                element_id,
-                strategy,
-                [],
-                params,
-                from_resolved=True,
-            )
-            dash.clientside_callback(
-                capture_js,
-                Output(snapshot_store_id, "data"),
-                Input(resolved_store_id, "data"),
-                State(format_id, "value"),
-                prevent_initial_call=True,
-            )
-        else:
-            # Direct flow: JS reads capture params from form State.
-            fixed_capture: dict[str, Any] = {}
-            dynamic_capture: list[str] = []
-            for name in active_capture:
-                spec = (field_specs or {}).get(name)
-                if isinstance(spec, _FieldFixed):
-                    fixed_capture[name] = spec.value
-                else:
-                    dynamic_capture.append(name)
-
-            _capture_states = [
-                State(field_id(config_id, name), "value") for name in dynamic_capture
-            ]
-            capture_js = build_capture_js(
-                element_id,
-                strategy,
-                dynamic_capture,
-                params,
-                fixed_capture=fixed_capture,
-            )
-
-            dash.clientside_callback(
-                capture_js,
-                Output(snapshot_store_id, "data"),
-                Input(generate_id, "n_clicks"),
-                Input(interval_id, "n_intervals"),
-                State(format_id, "value"),
-                *_capture_states,
-                prevent_initial_call=True,
-            )
-
-        _fig_states = [State(element_id, "figure")] if has_fig_data else []
-
-        @dash.callback(
-            Output(preview_id, "src"),
-            Output(error_id, "children"),
-            Input(snapshot_store_id, "data"),
-            *_fig_states,
-            *config.states,
-            prevent_initial_call=True,
-        )
-        def generate_preview(_img_b64, *args):
-            if not _img_b64:
-                return dash.no_update, dash.no_update
-            if has_fig_data:
-                fig_data, *field_values = args
-            else:
-                fig_data, field_values = {}, args
-            kwargs = config.build_kwargs(tuple(field_values))
-            try:
-                return _to_src(
-                    _call_renderer(
-                        renderer, has_fig_data, True, fig_data, _img_b64, kwargs
-                    )
-                ), ""
-            except Exception as e:
-                return dash.no_update, f"Error: {e}"
-    else:
-        _fig_states2 = [State(element_id, "figure")] if has_fig_data else []
-
-        @dash.callback(
-            Output(preview_id, "src"),
-            Output(error_id, "children"),
-            Input(generate_id, "n_clicks"),
-            Input(interval_id, "n_intervals"),
-            *_fig_states2,
-            *config.states,
-            prevent_initial_call=True,
-        )
-        def generate_preview(n_clicks, n_intervals, *args):
-            if not n_clicks and not n_intervals:
-                return dash.no_update, dash.no_update
-            if has_fig_data:
-                _fig_data, *field_values = args
-            else:
-                _fig_data, field_values = {}, args
-            kwargs = config.build_kwargs(tuple(field_values))
-            try:
-                return _to_src(
-                    _call_renderer(renderer, has_fig_data, False, _fig_data, "", kwargs)
-                ), ""
-            except Exception as e:
-                return dash.no_update, f"Error: {e}"
-
-    _fig_states_ag = [State(element_id, "figure")] if has_fig_data else []
-
-    # When capture_resolver is active, field changes trigger re-resolve →
-    # re-capture → snapshot update → generate_preview. No need for a
-    # separate autogenerate callback (it would race with stale data).
-    if config.states and capture_resolver is None:
-
-        @dash.callback(
-            Output(preview_id, "src", allow_duplicate=True),
-            *[Input(s.component_id, s.component_property) for s in config.states],
-            State(autogenerate_id, "value"),
-            State(snapshot_store_id, "data"),
-            *_fig_states_ag,
-            prevent_initial_call=True,
-        )
-        def autogenerate_preview(*args):
-            if has_fig_data:
-                *field_values, autogen, _img_b64, _fig_data = args
-            else:
-                *field_values, autogen, _img_b64 = args
-                _fig_data = {}
-            if not autogen:
-                return dash.no_update
-            if has_snapshot and not _img_b64:
-                return dash.no_update
-            kwargs = config.build_kwargs(tuple(field_values))
-            return _to_src(
-                _call_renderer(
-                    renderer,
-                    has_fig_data,
-                    has_snapshot,
-                    _fig_data,
-                    _img_b64 or "",
-                    kwargs,
-                )
-            )
-
-    _fig_states_dl = [State(element_id, "figure")] if has_fig_data else []
-
-    @dash.callback(
-        Output(download_id, "data"),
-        Input(f"{download_id}_btn", "n_clicks"),
-        State(preview_id, "src"),
-        State(format_id, "value"),
-        prevent_initial_call=True,
-    )
-    def download_figure(n_clicks, preview_src, fmt):
-        if not preview_src:
-            return dash.no_update
-        # The preview is already rendered with current settings —
-        # just download it directly.
-        import base64
-
-        header, data = preview_src.split(",", 1)
-        raw = base64.b64decode(data)
-        dl_name = filename
-        if fmt and fmt != "png":
-            stem = filename.rsplit(".", 1)[0] if "." in filename else filename
-            ext = "jpg" if fmt == "jpeg" else fmt
-            dl_name = f"{stem}.{ext}"
-        return dcc.send_bytes(raw, dl_name)
-
-    # --- copy to clipboard (clientside) ---
-    dash.clientside_callback(
-        """
-        async function(n_clicks, src) {
-            if (!n_clicks || !src) return window.dash_clientside.no_update;
-            try {
-                const resp = await fetch(src);
-                const blob = await resp.blob();
-                await navigator.clipboard.write([
-                    new ClipboardItem({ [blob.type]: blob })
-                ]);
-            } catch (e) {
-                console.error('Copy to clipboard failed:', e);
-            }
-            return window.dash_clientside.no_update;
-        }
-        """,
-        Output(copy_id, "n_clicks"),
-        Input(copy_id, "n_clicks"),
-        State(preview_id, "src"),
-        prevent_initial_call=True,
-    )
-
-    return wizard.div
+# ---------------------------------------------------------------------------
+# High-level API: capture_graph / capture_element
+# ---------------------------------------------------------------------------
 
 
 def _make_wizard(
@@ -698,7 +174,6 @@ def _make_wizard(
     active_capture = [name for name in params if name.startswith("capture_")]
     exclude = ["_target", "_snapshot_img", "_fig_data", *active_capture]
 
-    # Apply persist=True to all fields that don't have an explicit spec
     if persist:
         merged_specs: dict[str, Field | FieldHook] = {}
         for name in params:
@@ -743,7 +218,7 @@ def _make_wizard(
         _field_components=field_components,
     )
 
-    # --- modebar trigger: inject button into Plotly modebar via JS -----------
+    # Modebar trigger
     modebar_bridge = None
     if trigger == "modebar" or isinstance(trigger, ModebarButton | ModebarIcon):
         if isinstance(trigger, ModebarButton):
@@ -753,14 +228,10 @@ def _make_wizard(
         else:
             mb = ModebarButton()
         bridge_id = f"_dcap_modebar_{uid}"
-        modebar_bridge = add_modebar_button(
-            element_id,
-            bridge_id,
-            button=mb,
-        )
-        trigger = modebar_bridge  # wizard listens to bridge.n_clicks
+        modebar_bridge = add_modebar_button(element_id, bridge_id, button=mb)
+        trigger = modebar_bridge
 
-    wizard_div = _wire_wizard(
+    wizard_div = wire_wizard(
         element_id=element_id,
         strategy=strategy,
         renderer=renderer,
@@ -780,15 +251,9 @@ def _make_wizard(
         show_format=show_format,
     )
 
-    # Include the bridge div in the layout so Dash can find it.
     if modebar_bridge is not None:
         return html.Div([modebar_bridge, wizard_div])
     return wizard_div
-
-
-# ---------------------------------------------------------------------------
-# Public high-level API
-# ---------------------------------------------------------------------------
 
 
 def capture_graph(
@@ -818,68 +283,48 @@ def capture_graph(
     Opens a wizard modal with live preview, auto-generated form fields
     from the renderer's type hints, and download/copy buttons.
 
-    The *renderer* is a plain function whose typed parameters become
-    editable form fields. Reserved parameters are injected automatically:
-
-    - ``_target`` -- file-like object; write your output bytes here.
-    - ``_snapshot_img`` -- callable returning raw PNG bytes of the captured graph.
-    - ``_fig_data`` -- the Plotly figure dict (server-side, no capture needed).
-
     Parameters
     ----------
     graph : str or dcc.Graph
         The graph component or its string ``id``.
     renderer : callable
-        Renderer function following the protocol above.
+        Function with ``(_target, _snapshot_img, **fields)`` signature.
         Defaults to ``dash_capture.mpl.snapshot_renderer``.
-    trigger : str or Dash component
-        String label for an auto-created button, or a custom Dash component
-        with ``n_clicks``. Pass ``"modebar"`` or a :class:`ModebarButton` to
-        inject a button into the Plotly modebar instead.
+    trigger : str, Dash component, or ModebarButton
+        String label, custom component, ``"modebar"``, or :class:`ModebarButton`.
     strip_title, strip_legend, strip_annotations, strip_axis_titles, \
     strip_colorbar, strip_margin : bool
         Remove the corresponding Plotly element before capture.
-        Ignored when *strategy* is explicitly provided.
     strategy : CaptureStrategy, optional
         Override the built-in Plotly strategy.
     preprocess : str, optional
-        Custom JS preprocess code. Executes in the browser -- never pass
-        untrusted user input.
+        Custom JS preprocess code (browser-side, security-sensitive).
     filename : str
         Download filename (default ``"figure.png"``).
     autogenerate : bool
-        Regenerate preview automatically on field changes (default ``True``).
+        Regenerate preview on field changes (default ``True``).
     persist : bool
-        Persist form field values across sessions (default ``True``).
-    styles : dict, optional
-        CSS style overrides keyed by component (``"button"``, ``"dialog"``, etc.).
-    class_names : dict, optional
-        CSS class name overrides keyed by component.
+        Persist field values across sessions (default ``True``).
+    styles, class_names : dict, optional
+        CSS overrides keyed by component.
     field_specs : dict, optional
         Per-field :class:`~dash_fn_form.Field` overrides.
     field_components : str or callable
-        Component factory: ``"dcc"`` (default), ``"dmc"``, ``"dbc"``,
-        or a custom callable.
+        Component factory: ``"dcc"``, ``"dmc"``, ``"dbc"``, or callable.
     capture_resolver : callable, optional
-        Server-side function that computes capture options at runtime.
-        Receives current form field values as kwargs and returns a dict of
-        ``capture_*`` options (e.g. ``{"capture_width": 520}``). Runs
-        before the browser captures, so capture dimensions can depend on
-        user-editable form values.
+        Server-side function receiving form values as kwargs, returning
+        ``capture_*`` options (e.g. ``{"capture_width": 520}``).
     show_format : bool
-        Show the format dropdown (PNG/JPEG/WebP/SVG) in the wizard
-        (default ``True``).
+        Show the format dropdown (default ``True``).
 
     Returns
     -------
     html.Div
-        Self-contained component -- place anywhere in the layout.
 
     Examples
     --------
     >>> from dash_capture import capture_graph
     >>> wizard = capture_graph("my-graph", trigger="Export")
-    >>> app.layout = html.Div([dcc.Graph(id="my-graph", figure=fig), wizard])
     """
     if renderer is _UNSET:
         from dash_capture.mpl import snapshot_renderer
@@ -936,17 +381,12 @@ def capture_element(
 ) -> html.Div:
     """Capture wizard for any Dash component (html2canvas by default).
 
-    Same wizard UI as :func:`capture_graph` but uses ``html2canvas`` to
-    capture arbitrary DOM elements. The vendored html2canvas script is
-    auto-included when using the default strategy.
-
     Parameters
     ----------
     component : str or Dash component
         Any Dash component with an ``id``, or a string ID.
     renderer : callable
-        Renderer function. See :func:`capture_graph` for the protocol.
-        Defaults to ``dash_capture.mpl.snapshot_renderer``.
+        See :func:`capture_graph` for the protocol.
     trigger : str or Dash component
         String label or custom component with ``n_clicks``.
     strategy : CaptureStrategy, optional
@@ -958,32 +398,26 @@ def capture_element(
     autogenerate : bool
         Regenerate preview on field changes (default ``True``).
     persist : bool
-        Persist form field values across sessions (default ``True``).
-    styles : dict, optional
-        CSS style overrides keyed by component.
-    class_names : dict, optional
-        CSS class name overrides keyed by component.
+        Persist field values across sessions (default ``True``).
+    styles, class_names : dict, optional
+        CSS overrides keyed by component.
     field_specs : dict, optional
         Per-field :class:`~dash_fn_form.Field` overrides.
     field_components : str or callable
-        Component factory: ``"dcc"`` (default), ``"dmc"``, ``"dbc"``,
-        or a custom callable.
+        Component factory.
     capture_resolver : callable, optional
-        Server-side function that computes capture options at runtime.
-        See :func:`capture_graph` for details.
+        See :func:`capture_graph`.
     show_format : bool
-        Show the format dropdown in the wizard (default ``True``).
+        Show the format dropdown (default ``True``).
 
     Returns
     -------
     html.Div
-        Self-contained component -- place anywhere in the layout.
 
     Examples
     --------
     >>> from dash_capture import capture_element
     >>> wizard = capture_element("my-div", trigger="Screenshot")
-    >>> app.layout = html.Div([html.Div(id="my-div", children="Hello"), wizard])
     """
     if renderer is _UNSET:
         from dash_capture.mpl import snapshot_renderer
@@ -1012,7 +446,6 @@ def capture_element(
         show_format=show_format,
     )
 
-    # Auto-include vendored html2canvas.min.js if using html2canvas strategy
     if getattr(strategy, "capture", "") == _HTML2CANVAS_CAPTURE:
         from dash_capture._html2canvas import ensure_html2canvas
 
