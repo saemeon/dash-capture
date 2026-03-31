@@ -25,10 +25,6 @@ from dash_capture.strategies import (
     plotly_strategy,
 )
 
-# ---------------------------------------------------------------------------
-# FromPlotly hook
-# ---------------------------------------------------------------------------
-
 
 class FromPlotly(FromComponent):
     """Pre-populate a form field from the live Plotly figure.
@@ -42,11 +38,12 @@ class FromPlotly(FromComponent):
 
     Examples
     --------
+    >>> from dash import dcc
     >>> from dash_capture import FromPlotly, capture_graph
+    >>> graph = dcc.Graph(id="my-graph", figure=fig)
     >>> capture_graph(
-    ...     "my-graph",
-    ...     title=FromPlotly("layout.title.text"),
-    ...     sources="Internal data",
+    ...     graph,
+    ...     field_specs={"title": FromPlotly("layout.title.text", graph)},
     ... )
     """
 
@@ -69,13 +66,6 @@ def _get_nested(data: Any, path: str) -> Any:
     return data
 
 
-# ---------------------------------------------------------------------------
-# Low-level API: CaptureBinding
-# ---------------------------------------------------------------------------
-
-_UNSET: Callable = cast(Callable, object())
-
-
 @dataclass
 class CaptureBinding:
     """Low-level capture wiring: JS capture → ``dcc.Store``.
@@ -88,12 +78,6 @@ class CaptureBinding:
         The store's component ID.
     element_id : str
         The captured element's DOM ID.
-
-    Examples
-    --------
-    >>> from dash_capture import capture_binding
-    >>> binding = capture_binding("my-graph", trigger=Input("btn", "n_clicks"))
-    >>> app.layout = html.Div([dcc.Graph(id="my-graph"), binding.store])
     """
 
     store: dcc.Store
@@ -141,11 +125,6 @@ def capture_binding(
         )
 
     return CaptureBinding(store=store, store_id=store_id, element_id=el_id)
-
-
-# ---------------------------------------------------------------------------
-# High-level API: capture_graph / capture_element
-# ---------------------------------------------------------------------------
 
 
 def _make_wizard(
@@ -258,14 +237,8 @@ def _make_wizard(
 
 def capture_graph(
     graph: str | dcc.Graph,
-    renderer: Callable = _UNSET,
-    trigger: str | Any = "Capture",
-    strip_title: bool = False,
-    strip_legend: bool = False,
-    strip_annotations: bool = False,
-    strip_axis_titles: bool = False,
-    strip_colorbar: bool = False,
-    strip_margin: bool = False,
+    renderer: Callable | None = None,
+    trigger: str | Any = "modebar",
     strategy: CaptureStrategy | None = None,
     preprocess: str | None = None,
     filename: str = "figure.png",
@@ -287,16 +260,14 @@ def capture_graph(
     ----------
     graph : str or dcc.Graph
         The graph component or its string ``id``.
-    renderer : callable
+    renderer : callable, optional
         Function with ``(_target, _snapshot_img, **fields)`` signature.
         Defaults to ``dash_capture.mpl.snapshot_renderer``.
     trigger : str, Dash component, or ModebarButton
         String label, custom component, ``"modebar"``, or :class:`ModebarButton`.
-    strip_title, strip_legend, strip_annotations, strip_axis_titles, \
-    strip_colorbar, strip_margin : bool
-        Remove the corresponding Plotly element before capture.
     strategy : CaptureStrategy, optional
-        Override the built-in Plotly strategy.
+        Capture strategy. Defaults to ``plotly_strategy()``. Use
+        ``plotly_strategy(strip_title=True, ...)`` to strip elements.
     preprocess : str, optional
         Custom JS preprocess code (browser-side, security-sensitive).
     filename : str
@@ -323,10 +294,15 @@ def capture_graph(
 
     Examples
     --------
-    >>> from dash_capture import capture_graph
+    >>> from dash_capture import capture_graph, plotly_strategy
     >>> wizard = capture_graph("my-graph", trigger="Export")
+    >>> # With strip patches:
+    >>> wizard = capture_graph(
+    ...     "my-graph",
+    ...     strategy=plotly_strategy(strip_title=True, strip_legend=True),
+    ... )
     """
-    if renderer is _UNSET:
+    if renderer is None:
         from dash_capture.mpl import snapshot_renderer
 
         renderer = snapshot_renderer
@@ -335,15 +311,7 @@ def capture_graph(
 
     if strategy is None:
         params = inspect.signature(renderer).parameters
-        strategy = plotly_strategy(
-            strip_title=strip_title,
-            strip_legend=strip_legend,
-            strip_annotations=strip_annotations,
-            strip_axis_titles=strip_axis_titles,
-            strip_colorbar=strip_colorbar,
-            strip_margin=strip_margin,
-            _params=params,
-        )
+        strategy = plotly_strategy(_params=params)
 
     return _make_wizard(
         graph_id,
@@ -365,7 +333,7 @@ def capture_graph(
 
 def capture_element(
     component: str | Any,
-    renderer: Callable = _UNSET,
+    renderer: Callable | None = None,
     trigger: str | Any = "Capture",
     strategy: CaptureStrategy | None = None,
     preprocess: str | None = None,
@@ -385,12 +353,12 @@ def capture_element(
     ----------
     component : str or Dash component
         Any Dash component with an ``id``, or a string ID.
-    renderer : callable
+    renderer : callable, optional
         See :func:`capture_graph` for the protocol.
     trigger : str or Dash component
         String label or custom component with ``n_clicks``.
     strategy : CaptureStrategy, optional
-        Override the default html2canvas strategy.
+        Defaults to ``html2canvas_strategy()``.
     preprocess : str, optional
         Custom JS preprocess code.
     filename : str
@@ -419,7 +387,7 @@ def capture_element(
     >>> from dash_capture import capture_element
     >>> wizard = capture_element("my-div", trigger="Screenshot")
     """
-    if renderer is _UNSET:
+    if renderer is None:
         from dash_capture.mpl import snapshot_renderer
 
         renderer = snapshot_renderer

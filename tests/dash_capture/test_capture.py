@@ -139,14 +139,15 @@ class TestCaptureGraph:
         result = capture_graph("g", renderer=my_renderer)
         assert isinstance(result, html.Div)
 
-    def test_with_strip_options(self):
+    def test_with_strategy(self):
+        from dash_capture import plotly_strategy
+
         def renderer(_target):
             pass
 
         result = capture_graph(
             "g2",
             renderer=renderer,
-            strip_title=True,
-            strip_legend=True,
+            strategy=plotly_strategy(strip_title=True, strip_legend=True),
         )
         assert isinstance(result, html.Div)
