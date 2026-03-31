@@ -237,6 +237,7 @@ def _build_modal_body(
     styles,
     class_names,
     resolved_store_id: str | None = None,
+    show_format: bool = True,
 ) -> html.Div:
     # Always include Generate button in DOM (callbacks reference it),
     # but hide it when there are no form fields to configure.
@@ -244,8 +245,11 @@ def _build_modal_body(
     if not has_fields:
         gen_style["display"] = "none"
 
+    fmt_style = {"display": "flex", "alignItems": "center", "gap": "6px"}
+    if not show_format:
+        fmt_style["display"] = "none"
     format_selector = html.Div(
-        style={"display": "flex", "alignItems": "center", "gap": "6px"},
+        style=fmt_style,
         children=[
             html.Label("Format:", style={"fontSize": "12px", "color": "#888"}),
             dcc.Dropdown(
@@ -265,61 +269,84 @@ def _build_modal_body(
         ],
     )
 
-    action_buttons: list[Any] = [
-        html.Button(
-            "Generate",
-            id=generate_id,
-            style=gen_style,
-            className=class_names.get("button", ""),
-        ),
-    ]
-
-    action_buttons += [
-        dcc.Download(id=download_id),
-        html.Div(
-            style={"display": "flex", "gap": "4px"},
-            children=[
-                html.Button(
-                    "Download",
-                    id=f"{download_id}_btn",
-                    style=styles.get("button"),
-                    className=class_names.get("button", ""),
-                ),
-                html.Button(
-                    "Copy",
-                    id=copy_id,
-                    style=styles.get("button"),
-                    className=class_names.get("button", ""),
-                ),
-            ],
-        ),
-    ]
+    generate_btn = html.Button(
+        "Generate",
+        id=generate_id,
+        style=gen_style,
+        className=class_names.get("button", ""),
+    )
 
     return html.Div(
-        style={"display": "flex", "gap": "24px"},
+        style={"display": "flex", "flexDirection": "column", "gap": "12px"},
         children=[
+            # Top: config | preview
             html.Div(
-                style={
-                    "display": "flex",
-                    "flexDirection": "column",
-                    "gap": "8px",
-                    "minWidth": "160px",
-                },
-                children=[config_div, format_selector, *action_buttons],
-            ),
-            html.Div(
-                style={"position": "relative", "width": "400px", "minHeight": "200px"},
+                style={"display": "flex", "gap": "24px"},
                 children=[
-                    dcc.Loading(
-                        type="circle",
-                        children=[html.Img(id=preview_id, style={"maxWidth": "400px"})],
+                    html.Div(
+                        style={
+                            "display": "flex",
+                            "flexDirection": "column",
+                            "gap": "8px",
+                            "minWidth": "160px",
+                        },
+                        children=[config_div, format_selector],
                     ),
                     html.Div(
-                        id=error_id,
-                        style={"color": "red", "fontSize": "13px", "marginTop": "8px"},
+                        style={
+                            "position": "relative",
+                            "minWidth": "300px",
+                            "minHeight": "200px",
+                        },
+                        children=[
+                            dcc.Loading(
+                                type="circle",
+                                children=[
+                                    html.Img(id=preview_id, style={"maxWidth": "400px"})
+                                ],
+                            ),
+                            html.Div(
+                                id=error_id,
+                                style={
+                                    "color": "red",
+                                    "fontSize": "13px",
+                                    "marginTop": "8px",
+                                },
+                            ),
+                        ],
                     ),
                 ],
             ),
+            # Bottom: generate | download + copy
+            html.Div(
+                style={
+                    "display": "flex",
+                    "justifyContent": "space-between",
+                    "alignItems": "center",
+                },
+                children=[
+                    generate_btn,
+                    html.Div(
+                        style={"display": "flex", "gap": "6px"},
+                        children=[
+                            html.Button(
+                                "Download",
+                                id=f"{download_id}_btn",
+                                style=styles.get("button"),
+                                className=class_names.get("button", ""),
+                            ),
+                            html.Button(
+                                "Copy",
+                                id=copy_id,
+                                style=styles.get("button"),
+                                className=class_names.get("button", ""),
+                            ),
+                            dcc.Download(id=download_id),
+                        ],
+                    ),
+                ],
+            ),
+            # Hidden infra
             dcc.Interval(
                 id=interval_id,
                 interval=500,
@@ -351,6 +378,7 @@ def _wire_wizard(
     class_names: dict,
     field_specs: dict[str, Any] | None = None,
     capture_resolver: Callable | None = None,
+    show_format: bool = True,
 ) -> html.Div:
     """Wire the full wizard: modal + capture JS + preview/download callbacks."""
     config_id = ids["cfg"]
@@ -408,6 +436,7 @@ def _wire_wizard(
         styles,
         class_names,
         resolved_store_id=resolved_store_id,
+        show_format=show_format,
     )
 
     wizard = build_wizard(
@@ -444,15 +473,29 @@ def _wire_wizard(
             # Two-step flow: server resolves capture opts, then JS captures.
             assert resolved_store_id is not None
 
+            # config.states as Inputs (not State) so that field changes
+            # (e.g. figsize dropdown) trigger a re-resolve + re-capture.
+            _resolve_inputs = [
+                Input(s.component_id, s.component_property) for s in config.states
+            ]
+
             @dash.callback(
                 Output(resolved_store_id, "data"),
                 Input(generate_id, "n_clicks"),
                 Input(interval_id, "n_intervals"),
-                *config.states,
+                *_resolve_inputs,
+                State(autogenerate_id, "value"),
+                State(snapshot_store_id, "data"),
                 prevent_initial_call=True,
             )
-            def resolve_capture(n_clicks, n_intervals, *field_values):
-                if not n_clicks and not n_intervals:
+            def resolve_capture(n_clicks, n_intervals, *args):
+                *field_values, autogen, snapshot = args
+                is_generate = dash.ctx.triggered_id in (
+                    generate_id,
+                    interval_id,
+                )
+                is_field_change = not is_generate
+                if is_field_change and (not autogen or not snapshot):
                     return dash.no_update
                 kwargs = config.build_kwargs(tuple(field_values))
                 return capture_resolver(**kwargs)
@@ -558,7 +601,10 @@ def _wire_wizard(
 
     _fig_states_ag = [State(element_id, "figure")] if has_fig_data else []
 
-    if config.states:
+    # When capture_resolver is active, field changes trigger re-resolve →
+    # re-capture → snapshot update → generate_preview. No need for a
+    # separate autogenerate callback (it would race with stale data).
+    if config.states and capture_resolver is None:
 
         @dash.callback(
             Output(preview_id, "src", allow_duplicate=True),
@@ -595,30 +641,25 @@ def _wire_wizard(
     @dash.callback(
         Output(download_id, "data"),
         Input(f"{download_id}_btn", "n_clicks"),
-        State(snapshot_store_id, "data"),
+        State(preview_id, "src"),
         State(format_id, "value"),
-        *_fig_states_dl,
-        *config.states,
         prevent_initial_call=True,
     )
-    def download_figure(n_clicks, _img_b64, fmt, *args):
-        if has_fig_data:
-            _fig_data, *field_values = args
-        else:
-            _fig_data, field_values = {}, args
-        kwargs = config.build_kwargs(tuple(field_values))
-        # Adjust filename extension to match selected format
+    def download_figure(n_clicks, preview_src, fmt):
+        if not preview_src:
+            return dash.no_update
+        # The preview is already rendered with current settings —
+        # just download it directly.
+        import base64
+
+        header, data = preview_src.split(",", 1)
+        raw = base64.b64decode(data)
         dl_name = filename
         if fmt and fmt != "png":
             stem = filename.rsplit(".", 1)[0] if "." in filename else filename
             ext = "jpg" if fmt == "jpeg" else fmt
             dl_name = f"{stem}.{ext}"
-        return dcc.send_bytes(
-            _call_renderer(
-                renderer, has_fig_data, has_snapshot, _fig_data, _img_b64 or "", kwargs
-            ),
-            dl_name,
-        )
+        return dcc.send_bytes(raw, dl_name)
 
     # --- copy to clipboard (clientside) ---
     dash.clientside_callback(
@@ -660,6 +701,7 @@ def _make_wizard(
     field_specs: dict[str, Field | FieldHook] | None,
     field_components: Any,
     capture_resolver: Callable | None = None,
+    show_format: bool = True,
 ) -> html.Div:
     """Shared implementation for capture_graph and capture_element."""
     if preprocess is not None:
@@ -750,6 +792,7 @@ def _make_wizard(
         class_names=_class_names,
         field_specs=field_specs,
         capture_resolver=capture_resolver,
+        show_format=show_format,
     )
 
     # Include the bridge div in the layout so Dash can find it.
@@ -783,6 +826,7 @@ def capture_graph(
     field_specs: dict[str, Field | FieldHook] | None = None,
     field_components: Any = "dcc",
     capture_resolver: Callable | None = None,
+    show_format: bool = True,
 ) -> html.Div:
     """Capture wizard for a ``dcc.Graph``.
 
@@ -875,6 +919,7 @@ def capture_graph(
         field_specs,
         field_components,
         capture_resolver=capture_resolver,
+        show_format=show_format,
     )
 
 
@@ -892,6 +937,7 @@ def capture_element(
     field_specs: dict[str, Field | FieldHook] | None = None,
     field_components: Any = "dcc",
     capture_resolver: Callable | None = None,
+    show_format: bool = True,
 ) -> html.Div:
     """Capture wizard for any Dash component.
 
@@ -936,6 +982,7 @@ def capture_element(
         field_specs,
         field_components,
         capture_resolver=capture_resolver,
+        show_format=show_format,
     )
 
     # Auto-include vendored html2canvas.min.js if using html2canvas strategy
