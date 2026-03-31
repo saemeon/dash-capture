@@ -1,31 +1,7 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""Add custom buttons to Plotly modebars with Dash callback integration.
-
-Generic mechanism — not capture-specific. Any button added via
-:func:`add_modebar_button` returns a hidden bridge component whose
-``n_clicks`` increments when the user clicks the injected modebar button.
-Wire it to any Dash callback.
-
-How it works:
-
-1. A hidden ``html.Div`` (the *bridge*) with ``n_clicks=0`` is created.
-2. A ``clientside_callback`` injects the button into the modebar DOM
-   after the graph renders.
-3. The injected button's ``onclick`` calls ``bridge.click()``, which
-   Dash sees as an ``n_clicks`` increment.
-
-Usage::
-
-    from dash_capture import ModebarIcon, add_modebar_button
-
-    bridge = add_modebar_button("my-graph", "my-btn", tooltip="Export")
-    app.layout = html.Div([graph, bridge])
-
-    @app.callback(Output(...), Input("my-btn", "n_clicks"))
-    def on_click(n): ...
-"""
+"""Inject custom buttons into Plotly modebars with Dash callback integration."""
 
 from __future__ import annotations
 
@@ -37,23 +13,23 @@ from dash import Input, Output, html
 
 @dataclass
 class ModebarIcon:
-    """SVG icon for a modebar button.
-
-    For simple icons, provide ``path`` (a single SVG path).
-    For complex icons (text + shapes), provide ``svg_content``
-    (raw SVG inner markup).
+    """SVG icon definition for a modebar button.
 
     Parameters
     ----------
-    path :
-        SVG ``<path d="...">`` data. Ignored if ``svg_content`` is set.
-    svg_content :
-        Raw SVG inner markup (multiple paths, text, groups, etc.).
-        When set, ``path`` and ``transform`` are ignored.
-    width, height :
-        ViewBox dimensions (default 1000×1000, matching Plotly's icons).
-    transform :
+    path : str
+        SVG ``<path d="...">`` data. Ignored if *svg_content* is set.
+    svg_content : str
+        Raw SVG inner markup for complex icons (multiple paths, text, etc.).
+    width, height : int
+        ViewBox dimensions (default 1000 x 1000, matching Plotly icons).
+    transform : str
         Optional SVG transform applied to the path.
+
+    Examples
+    --------
+    >>> from dash_capture import ModebarIcon
+    >>> icon = ModebarIcon(path="M500 0 L1000 1000 L0 1000 Z")
     """
 
     path: str = ""
@@ -63,7 +39,7 @@ class ModebarIcon:
     transform: str = ""
 
     def to_svg_inner(self) -> str:
-        """Return the SVG inner markup for this icon."""
+        """Return SVG inner markup."""
         if self.svg_content:
             return self.svg_content
         transform = f' transform="{self.transform}"' if self.transform else ""
@@ -77,24 +53,25 @@ _DEFAULT_LABEL = "\U0001f4f7"  # 📷
 class ModebarButton:
     """Configuration for a modebar button.
 
-    Pass as ``trigger`` to :func:`~dash_capture.capture_graph`, or use
-    directly with :func:`add_modebar_button`::
+    Parameters
+    ----------
+    icon : ModebarIcon, optional
+        SVG icon. When set, rendered as SVG instead of a text label.
+    label : str
+        Text/emoji label. Defaults to a camera emoji when neither
+        *label* nor *icon* is set.
+    tooltip : str
+        Hover tooltip text (default ``"Capture"``).
 
-        # With capture_graph
-        capture_graph("my-graph", trigger=ModebarButton(tooltip="Export"))
-
-        # Standalone
-        bridge = add_modebar_button("my-graph", "btn-id",
-                                     button=ModebarButton(icon=my_icon))
+    Examples
+    --------
+    >>> from dash_capture import ModebarButton, capture_graph
+    >>> capture_graph("my-graph", trigger=ModebarButton(tooltip="Export"))
     """
 
     icon: ModebarIcon | None = None
-    """SVG icon. When set, rendered as an SVG instead of a text label."""
     label: str = ""
-    """Plain text/emoji label (e.g. ``"SNB📷"``). Defaults to 📷 when
-    neither ``label`` nor ``icon`` is set."""
     tooltip: str = "Capture"
-    """Hover tooltip text."""
 
 
 def _build_inject_js(
@@ -105,7 +82,7 @@ def _build_inject_js(
     icon: ModebarIcon | None = None,
     label: str = "",
 ) -> str:
-    """Build JS that injects a custom button into the Plotly modebar."""
+    """Build JS that injects a button into the Plotly modebar."""
     safe_gid = graph_id.replace("\\", "\\\\").replace("'", "\\'")
     safe_bid = bridge_id.replace("\\", "\\\\").replace("'", "\\'")
 
@@ -172,36 +149,34 @@ def add_modebar_button(
 ) -> html.Div:
     """Add a custom button to a Plotly graph's modebar.
 
-    Returns a hidden ``html.Div`` whose ``n_clicks`` increments when the
-    user clicks the injected button. Wire it to any Dash callback::
-
-        bridge = add_modebar_button("my-graph", "export-btn", tooltip="Export")
-        app.layout = html.Div([graph, bridge])
-
-        @app.callback(Output("result", "children"), Input("export-btn", "n_clicks"))
-        def on_click(n):
-            return f"Clicked {n} times"
+    Returns a hidden bridge ``html.Div`` whose ``n_clicks`` increments
+    when the injected button is clicked.
 
     Parameters
     ----------
-    graph_id :
+    graph_id : str
         The ``id`` of the ``dcc.Graph`` component.
-    bridge_id :
-        Unique ID for the hidden bridge ``html.Div``. Use this ID as
+    bridge_id : str
+        Unique ID for the hidden bridge component. Use as
         ``Input(bridge_id, "n_clicks")`` in your callback.
-    button :
-        A :class:`ModebarButton` with icon and tooltip.
-        When provided, ``icon`` and ``tooltip`` kwargs are ignored.
-    icon :
-        SVG icon to display. When neither ``icon`` nor ``label`` is
-        given, defaults to a 📷 emoji label.
-    tooltip :
-        Hover tooltip text for the button.
+    button : ModebarButton, optional
+        Button configuration. When provided, *icon* and *tooltip*
+        kwargs are ignored.
+    icon : ModebarIcon, optional
+        SVG icon to display.
+    tooltip : str
+        Hover tooltip text (default ``"Capture"``).
 
     Returns
     -------
     html.Div
-        Hidden component — include in the layout.
+        Hidden bridge component -- include in the layout.
+
+    Examples
+    --------
+    >>> from dash_capture import add_modebar_button
+    >>> bridge = add_modebar_button("my-graph", "export-btn", tooltip="Export")
+    >>> app.layout = html.Div([graph, bridge])
     """
     label = ""
     if button is not None:

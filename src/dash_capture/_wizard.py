@@ -12,17 +12,7 @@ from dash import Input, Output, dcc, html
 
 @dataclass
 class Wizard:
-    """Return value of :func:`build_wizard`.
-
-    Attributes
-    ----------
-    div :
-        Self-contained component; place anywhere in the layout.
-    open_input :
-        ``Input(store_id, "data")`` — pass to
-        :meth:`Config.register_populate_callback` to populate hooked fields
-        when the wizard opens.
-    """
+    """Return value of :func:`build_wizard`."""
 
     div: html.Div
     open_input: Input
@@ -54,38 +44,7 @@ def build_wizard(
     title_style: dict | None = None,
     close_style: dict | None = None,
 ) -> Wizard:
-    """Wrap *body* in a modal wizard popup.
-
-    Parameters
-    ----------
-    wizard_id :
-        Unique namespace for component IDs.
-    body :
-        Any Dash component rendered inside the dialog, below the header.
-    trigger :
-        Either a string label (creates a plain ``html.Button``) or a custom
-        Dash component with an ``id`` attribute that responds to ``n_clicks``.
-    title :
-        Text shown in the dialog header.
-    header_actions :
-        Optional component(s) rendered in the header row between the title
-        and the ✕ close button.
-    dialog_style :
-        CSS properties merged on top of the default dialog style. Use this
-        to override individual properties (e.g. ``{"minWidth": "800px"}``).
-        To remove the default style entirely, pass an empty dict and use
-        *dialog_class_name* instead.
-    dialog_class_name :
-        CSS class name(s) added to the dialog container, e.g. for Bootstrap
-        or Mantine users who prefer class-based styling.
-
-    Returns
-    -------
-    Wizard
-        ``.div`` — place anywhere in the layout.
-        ``.open_input`` — pass to :meth:`Config.register_populate_callback`
-        so hooked fields are populated when the wizard opens.
-    """
+    """Wrap *body* in a modal wizard popup with open/close logic."""
     default_trigger_id = f"_dcap_wiz_trigger_{wizard_id}"
     close_id = f"_dcap_wiz_close_{wizard_id}"
     store_id = f"_dcap_wiz_store_{wizard_id}"

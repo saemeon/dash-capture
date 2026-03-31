@@ -1,6 +1,12 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
+"""Browser-side capture pipeline for Dash components.
+
+Captures Plotly figures and arbitrary DOM elements from the browser,
+delivers the result to Python for post-processing, and provides
+download/clipboard export -- no headless browser required.
+"""
 
 from importlib.metadata import PackageNotFoundError, version
 

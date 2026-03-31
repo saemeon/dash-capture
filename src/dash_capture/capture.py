@@ -1,20 +1,13 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""Capture pipeline for Dash components.
-
-Plotly figures only exist in the browser's JavaScript environment — the Python
-server never holds chart pixels. This module bridges that gap by triggering a
-browser-side capture and delivering the result to Python for post-processing,
-custom rendering, and download. No server-side headless browser required.
+"""Low-level and high-level capture APIs for Dash components.
 
 Two API levels:
 
-- **Low-level**: :class:`CaptureBinding` — wires JS capture → ``dcc.Store``.
-  No wizard, no form. User builds their own UI and handles the result.
-- **High-level**: :func:`capture_graph` / :func:`capture_element` — full wizard
-  with auto-generated form fields (from the renderer's type hints), live
-  preview, and download button.
+- **Low-level** -- :class:`CaptureBinding` wires JS capture to a ``dcc.Store``.
+- **High-level** -- :func:`capture_graph` / :func:`capture_element` add a full
+  wizard with auto-generated form, live preview, and download.
 """
 
 from __future__ import annotations
@@ -51,24 +44,24 @@ from dash_capture.strategies import (
 class FromPlotly(FromComponent):
     """Pre-populate a form field from the live Plotly figure.
 
-    When the wizard opens, reads the current value from the running figure
-    so the user doesn't have to retype it. Useful for fields like title or
-    sources that may already be set on the figure.
-
-    Example::
-
-        capture_graph(
-            "my-graph",
-            title=FromPlotly("layout.title.text"),   # reads current title
-            sources="Internal data",
-        )
+    Reads a value from the running figure when the wizard opens, so the
+    user does not have to retype it.
 
     Parameters
     ----------
-    path :
+    path : str
         Dot-separated path into the figure dict, e.g. ``"layout.title.text"``.
-    graph :
-        The ``dcc.Graph`` component whose figure to read.
+    graph : dcc.Graph
+        The graph component whose figure to read from.
+
+    Examples
+    --------
+    >>> from dash_capture import FromPlotly, capture_graph
+    >>> capture_graph(
+    ...     "my-graph",
+    ...     title=FromPlotly("layout.title.text"),
+    ...     sources="Internal data",
+    ... )
     """
 
     def __init__(self, path: str, graph: dcc.Graph):
@@ -135,38 +128,30 @@ def _get_nested(data: Any, path: str) -> Any:
 
 @dataclass
 class CaptureBinding:
-    """Low-level capture wiring: JS capture → ``dcc.Store``.
+    """Low-level capture wiring: JS capture to ``dcc.Store``.
 
-    Place ``.store`` in your layout. Wire ``.arm(trigger_input)`` to start
-    the capture. Read the base64 result from ``State(binding.store_id, "data")``.
+    Place ``.store`` in your layout and read the base64 result from
+    ``State(binding.store_id, "data")``.
 
-    Example::
+    Attributes
+    ----------
+    store : dcc.Store
+        Component to place in your layout.
+    store_id : str
+        The store's component ID for use in ``State(store_id, "data")``.
+    element_id : str
+        The captured element's DOM ID.
 
-        binding = capture_binding("my-graph")
-        app.layout = html.Div([
-            dcc.Graph(id="my-graph", figure=fig),
-            binding.store,
-            html.Button("Capture", id="cap-btn"),
-            html.Img(id="preview"),
-        ])
-
-        @app.callback(
-            Output("preview", "src"),
-            Input(binding.store_id, "data"),
-            prevent_initial_call=True,
-        )
-        def show_preview(b64):
-            return b64  # data:image/png;base64,...
+    Examples
+    --------
+    >>> from dash_capture import capture_binding
+    >>> binding = capture_binding("my-graph", trigger=Input("btn", "n_clicks"))
+    >>> app.layout = html.Div([dcc.Graph(id="my-graph"), binding.store])
     """
 
     store: dcc.Store
-    """Place this ``dcc.Store`` in your layout."""
-
     store_id: str
-    """The store's component ID — use in ``State(store_id, "data")``."""
-
     element_id: str
-    """The captured element's DOM ID."""
 
 
 def capture_binding(
@@ -174,27 +159,27 @@ def capture_binding(
     strategy: CaptureStrategy | None = None,
     trigger: Input | None = None,
 ) -> CaptureBinding:
-    """Create a low-level capture binding.
-
-    Wires the JS capture → ``dcc.Store`` without any wizard or form.
-    The user is responsible for placing the store in the layout and
-    building their own UI.
+    """Create a low-level capture binding without wizard or form.
 
     Parameters
     ----------
-    element :
+    element : str or Dash component
         A Dash component with an ``id``, or a string ID.
-    strategy :
+    strategy : CaptureStrategy, optional
         Capture strategy. Defaults to ``plotly_strategy()``.
-    trigger :
-        A Dash ``Input`` that triggers the capture (e.g.
-        ``Input("btn", "n_clicks")``). If ``None``, you must wire
-        the clientside callback yourself.
+    trigger : Input, optional
+        Dash ``Input`` that triggers the capture. If ``None``, you must
+        wire the clientside callback yourself.
 
     Returns
     -------
     CaptureBinding
-        Contains ``.store`` (place in layout) and ``.store_id``.
+
+    Examples
+    --------
+    >>> from dash import Input
+    >>> from dash_capture import capture_binding
+    >>> binding = capture_binding("my-graph", trigger=Input("btn", "n_clicks"))
     """
     el_id = element if isinstance(element, str) else cast(Any, element).id
 
@@ -380,7 +365,7 @@ def _wire_wizard(
     capture_resolver: Callable | None = None,
     show_format: bool = True,
 ) -> html.Div:
-    """Wire the full wizard: modal + capture JS + preview/download callbacks."""
+    """Wire the full wizard: modal, capture JS, preview, and download callbacks."""
     config_id = ids["cfg"]
     wizard_id = ids["wiz"]
     preview_id = ids["preview"]
@@ -703,7 +688,7 @@ def _make_wizard(
     capture_resolver: Callable | None = None,
     show_format: bool = True,
 ) -> html.Div:
-    """Shared implementation for capture_graph and capture_element."""
+    """Shared implementation for ``capture_graph`` and ``capture_element``."""
     if preprocess is not None:
         strategy = CaptureStrategy(preprocess=preprocess, capture=strategy.capture)
 
@@ -830,61 +815,71 @@ def capture_graph(
 ) -> html.Div:
     """Capture wizard for a ``dcc.Graph``.
 
-    Renders a trigger button that opens a wizard modal with live preview,
-    auto-generated form fields from the renderer's signature, and a
-    download button.
+    Opens a wizard modal with live preview, auto-generated form fields
+    from the renderer's type hints, and download/copy buttons.
 
-    **Renderer protocol:**
+    The *renderer* is a plain function whose typed parameters become
+    editable form fields. Reserved parameters are injected automatically:
 
-    The renderer is a plain Python function. Any typed parameters it declares
-    (beyond the reserved ones below) become editable form fields in the wizard:
-
-    .. code-block:: python
-
-        def my_renderer(
-            _target,          # file-like — write your PNG bytes here
-            _snapshot_img,    # callable() → raw PNG bytes of the captured graph
-            title: str = "",  # → text input in the wizard
-            dpi: int = 150,   # → number input in the wizard
-        ):
-            ...
-
-    Reserved parameters injected automatically:
-
-    - ``_target`` — file-like object; call ``_target.write(bytes)`` to produce the download.
-    - ``_snapshot_img`` — callable that returns raw PNG bytes of the browser-captured figure.
-    - ``_fig_data`` — the Plotly figure dict (server-side access, no browser capture needed).
+    - ``_target`` -- file-like object; write your output bytes here.
+    - ``_snapshot_img`` -- callable returning raw PNG bytes of the captured graph.
+    - ``_fig_data`` -- the Plotly figure dict (server-side, no capture needed).
 
     Parameters
     ----------
-    graph :
-        The ``dcc.Graph`` component or its string ``id``.
-    renderer :
-        Callable following the renderer protocol above.
-        Defaults to :func:`dash_capture.mpl.snapshot_renderer`.
-    trigger :
-        String label or custom Dash component with ``n_clicks``.
-    strip_title, strip_legend, strip_annotations, strip_axis_titles,
-    strip_colorbar, strip_margin :
+    graph : str or dcc.Graph
+        The graph component or its string ``id``.
+    renderer : callable
+        Renderer function following the protocol above.
+        Defaults to ``dash_capture.mpl.snapshot_renderer``.
+    trigger : str or Dash component
+        String label for an auto-created button, or a custom Dash component
+        with ``n_clicks``. Pass ``"modebar"`` or a :class:`ModebarButton` to
+        inject a button into the Plotly modebar instead.
+    strip_title, strip_legend, strip_annotations, strip_axis_titles, \
+    strip_colorbar, strip_margin : bool
         Remove the corresponding Plotly element before capture.
-        Ignored when ``strategy`` is explicitly provided.
-    strategy :
-        A :class:`CaptureStrategy` overriding the built-in Plotly strategy.
-    preprocess :
-        Custom JS preprocess code, overriding the strategy's default.
-        **Security:** This executes as JavaScript in the browser.
-        Never pass untrusted user input here.
-    filename :
-        Download filename. Defaults to ``"figure.png"``.
-    field_components :
-        Component factory for form fields: ``"dcc"`` (default),
-        ``"dmc"`` (Mantine), ``"dbc"`` (Bootstrap), or a custom callable.
-    capture_resolver :
-        Optional callable that computes capture options at runtime.
-        Receives the current form field values as kwargs, returns a dict
-        of ``capture_*`` options (e.g. ``{"capture_width": 520}``).
-        The resolver runs server-side before the browser captures, allowing
-        capture dimensions to depend on user-editable form values.
+        Ignored when *strategy* is explicitly provided.
+    strategy : CaptureStrategy, optional
+        Override the built-in Plotly strategy.
+    preprocess : str, optional
+        Custom JS preprocess code. Executes in the browser -- never pass
+        untrusted user input.
+    filename : str
+        Download filename (default ``"figure.png"``).
+    autogenerate : bool
+        Regenerate preview automatically on field changes (default ``True``).
+    persist : bool
+        Persist form field values across sessions (default ``True``).
+    styles : dict, optional
+        CSS style overrides keyed by component (``"button"``, ``"dialog"``, etc.).
+    class_names : dict, optional
+        CSS class name overrides keyed by component.
+    field_specs : dict, optional
+        Per-field :class:`~dash_fn_form.Field` overrides.
+    field_components : str or callable
+        Component factory: ``"dcc"`` (default), ``"dmc"``, ``"dbc"``,
+        or a custom callable.
+    capture_resolver : callable, optional
+        Server-side function that computes capture options at runtime.
+        Receives current form field values as kwargs and returns a dict of
+        ``capture_*`` options (e.g. ``{"capture_width": 520}``). Runs
+        before the browser captures, so capture dimensions can depend on
+        user-editable form values.
+    show_format : bool
+        Show the format dropdown (PNG/JPEG/WebP/SVG) in the wizard
+        (default ``True``).
+
+    Returns
+    -------
+    html.Div
+        Self-contained component -- place anywhere in the layout.
+
+    Examples
+    --------
+    >>> from dash_capture import capture_graph
+    >>> wizard = capture_graph("my-graph", trigger="Export")
+    >>> app.layout = html.Div([dcc.Graph(id="my-graph", figure=fig), wizard])
     """
     if renderer is _UNSET:
         from dash_capture.mpl import snapshot_renderer
@@ -939,24 +934,56 @@ def capture_element(
     capture_resolver: Callable | None = None,
     show_format: bool = True,
 ) -> html.Div:
-    """Capture wizard for any Dash component.
+    """Capture wizard for any Dash component (html2canvas by default).
 
-    Uses ``html2canvas`` by default. Requires html2canvas to be loaded
-    (e.g. via ``app.scripts``).
+    Same wizard UI as :func:`capture_graph` but uses ``html2canvas`` to
+    capture arbitrary DOM elements. The vendored html2canvas script is
+    auto-included when using the default strategy.
 
     Parameters
     ----------
-    component :
+    component : str or Dash component
         Any Dash component with an ``id``, or a string ID.
-    renderer :
-        Callable with signature ``(_target, _snapshot_img, **fields)``.
-        Defaults to :func:`dash_capture.mpl.snapshot_renderer`.
-    field_components :
+    renderer : callable
+        Renderer function. See :func:`capture_graph` for the protocol.
+        Defaults to ``dash_capture.mpl.snapshot_renderer``.
+    trigger : str or Dash component
+        String label or custom component with ``n_clicks``.
+    strategy : CaptureStrategy, optional
+        Override the default html2canvas strategy.
+    preprocess : str, optional
+        Custom JS preprocess code.
+    filename : str
+        Download filename (default ``"capture.png"``).
+    autogenerate : bool
+        Regenerate preview on field changes (default ``True``).
+    persist : bool
+        Persist form field values across sessions (default ``True``).
+    styles : dict, optional
+        CSS style overrides keyed by component.
+    class_names : dict, optional
+        CSS class name overrides keyed by component.
+    field_specs : dict, optional
+        Per-field :class:`~dash_fn_form.Field` overrides.
+    field_components : str or callable
         Component factory: ``"dcc"`` (default), ``"dmc"``, ``"dbc"``,
         or a custom callable.
-    capture_resolver :
-        Optional callable that computes capture options at runtime.
+    capture_resolver : callable, optional
+        Server-side function that computes capture options at runtime.
         See :func:`capture_graph` for details.
+    show_format : bool
+        Show the format dropdown in the wizard (default ``True``).
+
+    Returns
+    -------
+    html.Div
+        Self-contained component -- place anywhere in the layout.
+
+    Examples
+    --------
+    >>> from dash_capture import capture_element
+    >>> wizard = capture_element("my-div", trigger="Screenshot")
+    >>> app.layout = html.Div([html.Div(id="my-div", children="Hello"), wizard])
     """
     if renderer is _UNSET:
         from dash_capture.mpl import snapshot_renderer

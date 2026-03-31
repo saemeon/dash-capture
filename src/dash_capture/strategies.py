@@ -1,18 +1,10 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""Three-stage capture strategies: preprocess → capture → postprocess.
+"""Capture strategies: browser-side preprocess and capture JS fragments.
 
-The preprocess and capture stages are JS functions that run in the browser.
-The postprocess stage is a Python renderer function (handled separately).
-
-Built-in strategies:
-- ``plotly_strategy`` — ``Plotly.toImage()`` with optional strip patches
-- ``html2canvas_strategy`` — ``html2canvas()`` for arbitrary DOM elements
-- ``canvas_strategy`` — raw ``canvas.toDataURL()`` for canvas elements
-
-The JS fragments here are intentionally kept in sync with
-``r-packages/shinycapture/inst/shinycapture/shinycapture.js``.
+Built-in strategies: ``plotly_strategy``, ``html2canvas_strategy``,
+``canvas_strategy``.
 """
 
 from __future__ import annotations
@@ -24,28 +16,28 @@ from typing import Any
 
 @dataclass
 class CaptureStrategy:
-    """Three-stage capture pipeline definition.
+    """Two-stage capture pipeline: preprocess JS + capture JS.
 
     Parameters
     ----------
-    preprocess :
-        JS code that runs before capture.  Receives ``(el, opts)`` where
-        *el* is the DOM element and *opts* is the capture options dict.
-        May mutate the element or create a temporary clone.
-        ``None`` means no preprocessing.
-    capture :
-        JS code that performs the actual capture.  Receives ``(el, opts)``
-        and must return a base64 data-URI string (or a Promise thereof).
+    preprocess : str or None
+        JS code that runs before capture. Receives ``(el, opts)`` where
+        *el* is the DOM element. ``None`` means no preprocessing.
+    capture : str
+        JS code that performs the capture. Must return a base64 data-URI
+        string (or a Promise thereof).
+    format : str
+        Default output format: ``"png"``, ``"jpeg"``, ``"webp"``, ``"svg"``.
 
-    .. warning::
-        Both fields execute as JavaScript in the browser.
-        Never pass untrusted user input into these fields.
+    Notes
+    -----
+    Both fields execute as JavaScript in the browser. Never pass untrusted
+    user input into these fields.
     """
 
     preprocess: str | None = None
     capture: str = ""
     format: str = "png"
-    """Output format: ``"png"``, ``"jpeg"``/``"jpg"``, ``"webp"``, ``"svg"``."""
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +67,7 @@ def _build_strip_patches(
     strip_colorbar: bool = False,
     strip_margin: bool = False,
 ) -> list[str]:
-    """Build JS patch statements for Plotly figure stripping."""
+    """Build JS patch statements for stripping Plotly figure elements."""
     patches: list[str] = []
     if strip_title:
         patches += _STRIP_TITLE
@@ -93,7 +85,7 @@ def _build_strip_patches(
 
 
 def _build_plotly_preprocess(patches: list[str], params: Mapping) -> str | None:
-    """Build JS preprocess code that clones the Plotly figure into an offscreen div."""
+    """Build JS preprocess that clones the figure into an offscreen div."""
     if not patches:
         return None
 
@@ -174,15 +166,24 @@ def plotly_strategy(
     format: str = "png",
     _params: Mapping | None = None,
 ) -> CaptureStrategy:
-    """Plotly.toImage() strategy with optional strip patches.
+    """``Plotly.toImage()`` strategy with optional element stripping.
 
     Parameters
     ----------
-    strip_title, strip_legend, strip_annotations, strip_axis_titles,
-    strip_colorbar, strip_margin :
+    strip_title, strip_legend, strip_annotations, strip_axis_titles, \
+    strip_colorbar, strip_margin : bool
         Remove the corresponding element from the figure before capture.
-    format :
-        Output format: ``"png"``, ``"jpeg"``, ``"webp"``, ``"svg"``.
+    format : str
+        Output format (default ``"png"``).
+
+    Returns
+    -------
+    CaptureStrategy
+
+    Examples
+    --------
+    >>> from dash_capture import plotly_strategy
+    >>> strategy = plotly_strategy(strip_title=True, strip_legend=True)
     """
     patches = _build_strip_patches(
         strip_title,
@@ -198,23 +199,31 @@ def plotly_strategy(
 
 
 def html2canvas_strategy(format: str = "png") -> CaptureStrategy:
-    """html2canvas strategy for capturing arbitrary DOM elements.
+    """``html2canvas`` strategy for capturing arbitrary DOM elements.
 
     Parameters
     ----------
-    format :
-        Output format: ``"png"``, ``"jpeg"``/``"jpg"``.
+    format : str
+        Output format (default ``"png"``).
+
+    Returns
+    -------
+    CaptureStrategy
     """
     return CaptureStrategy(capture=_HTML2CANVAS_CAPTURE, format=format)
 
 
 def canvas_strategy(format: str = "png") -> CaptureStrategy:
-    """Raw canvas.toDataURL() strategy for canvas-based components.
+    """Raw ``canvas.toDataURL()`` strategy for canvas-based components.
 
     Parameters
     ----------
-    format :
-        Output format: ``"png"``, ``"jpeg"``/``"jpg"``.
+    format : str
+        Output format (default ``"png"``).
+
+    Returns
+    -------
+    CaptureStrategy
     """
     return CaptureStrategy(capture=_CANVAS_CAPTURE, format=format)
 
@@ -233,29 +242,7 @@ def build_capture_js(
     fixed_capture: dict[str, Any] | None = None,
     from_resolved: bool = False,
 ) -> str:
-    """Assemble a CaptureStrategy into a Dash clientside callback JS function.
-
-    Parameters
-    ----------
-    element_id :
-        The DOM id of the element to capture.
-    strategy :
-        The capture strategy (preprocess + capture JS fragments).
-    active_capture :
-        Parameter names starting with ``capture_`` that are read from form
-        State components at runtime (dynamic values).
-        Ignored when ``from_resolved`` is ``True``.
-    params :
-        The renderer's ``inspect.signature().parameters`` dict.
-    fixed_capture :
-        Parameter names starting with ``capture_`` whose values are constants
-        (from ``fixed()``). These are inlined directly in the JS.
-        Ignored when ``from_resolved`` is ``True``.
-    from_resolved :
-        When ``True``, the JS function reads capture options from a
-        ``resolved_data`` dict (first argument) instead of individual
-        State components. Used with ``capture_resolver``.
-    """
+    """Assemble a strategy into a Dash clientside callback JS function."""
     if from_resolved:
         js_args = "resolved_data, fmt"
         js_build_opts = """if (resolved_data) {
