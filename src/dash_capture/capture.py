@@ -142,6 +142,7 @@ def _make_wizard(
     field_components: Any,
     capture_resolver: Callable | None = None,
     show_format: bool = True,
+    wizard_header: str | Any = "Capture",
 ) -> html.Div:
     """Shared implementation for ``capture_graph`` and ``capture_element``."""
     if preprocess is not None:
@@ -228,6 +229,7 @@ def _make_wizard(
         field_specs=field_specs,
         capture_resolver=capture_resolver,
         show_format=show_format,
+        wizard_header=wizard_header,
     )
 
     if modebar_bridge is not None:
@@ -250,6 +252,7 @@ def capture_graph(
     field_components: Any = "dcc",
     capture_resolver: Callable | None = None,
     show_format: bool = True,
+    wizard_header: str | Any = "Capture",
 ) -> html.Div:
     """Capture wizard for a ``dcc.Graph``.
 
@@ -328,6 +331,7 @@ def capture_graph(
         field_components,
         capture_resolver=capture_resolver,
         show_format=show_format,
+        wizard_header=wizard_header,
     )
 
 
@@ -346,6 +350,7 @@ def capture_element(
     field_components: Any = "dcc",
     capture_resolver: Callable | None = None,
     show_format: bool = True,
+    wizard_header: str | Any = "Capture",
 ) -> html.Div:
     """Capture wizard for any Dash component (html2canvas by default).
 
@@ -412,6 +417,7 @@ def capture_element(
         field_components,
         capture_resolver=capture_resolver,
         show_format=show_format,
+        wizard_header=wizard_header,
     )
 
     if getattr(strategy, "capture", "") == _HTML2CANVAS_CAPTURE:

@@ -370,6 +370,7 @@ def wire_wizard(
     field_specs: dict[str, Any] | None = None,
     capture_resolver: Callable | None = None,
     show_format: bool = True,
+    wizard_header: str | Any = "Capture",
 ) -> html.Div:
     """Build the wizard layout and register all callbacks."""
     config_id = ids["cfg"]
@@ -434,7 +435,7 @@ def wire_wizard(
         wizard_id,
         body,
         trigger=trigger,
-        title="Capture",
+        title=wizard_header,
         header_actions=menu,
         dialog_style=styles.get("dialog"),
         dialog_class_name=class_names.get("dialog", ""),

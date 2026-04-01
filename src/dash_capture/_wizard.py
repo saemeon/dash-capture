@@ -37,7 +37,7 @@ def build_wizard(
     wizard_id: str,
     body: Any,
     trigger: str | Any = "Open",
-    title: str = "",
+    title: str | Any = "",
     header_actions: Any = None,
     dialog_style: dict | None = None,
     dialog_class_name: str = "",
@@ -84,7 +84,9 @@ def build_wizard(
                             "alignItems": "center",
                         },
                         children=[
-                            html.Strong(title, style=title_style),
+                            html.Strong(title, style=title_style)
+                            if isinstance(title, str)
+                            else title,
                             html.Div(
                                 style={
                                     "display": "flex",
