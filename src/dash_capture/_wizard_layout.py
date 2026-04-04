@@ -25,6 +25,7 @@ def build_modal_body(
     class_names: dict,
     resolved_store_id: str | None = None,
     show_format: bool = True,
+    action_button_ids: list[tuple[str, str]] | None = None,
 ) -> html.Div:
     """Build the wizard modal body: config fields, preview, and action buttons."""
     gen_style = dict(styles.get("button") or {})
@@ -127,6 +128,15 @@ def build_modal_body(
                                 style=styles.get("button"),
                                 className=class_names.get("button", ""),
                             ),
+                            *[
+                                html.Button(
+                                    label,
+                                    id=btn_id,
+                                    style=styles.get("button"),
+                                    className=class_names.get("button", ""),
+                                )
+                                for btn_id, label in (action_button_ids or [])
+                            ],
                             dcc.Download(id=download_id),
                         ],
                     ),

@@ -346,6 +346,33 @@ def _register_copy_to_clipboard(copy_id: str, preview_id: str) -> None:
     )
 
 
+def _register_custom_action(
+    *,
+    btn_id: str,
+    preview_id: str,
+    snapshot_store_id: str,
+    config: FnForm,
+    callback: Callable,
+) -> None:
+    """Register a custom action button callback."""
+
+    @dash.callback(
+        Output(btn_id, "n_clicks"),
+        Input(btn_id, "n_clicks"),
+        State(snapshot_store_id, "data"),
+        State(preview_id, "src"),
+        *config.states,
+        prevent_initial_call=True,
+    )
+    def handle_action(n_clicks, snapshot_data, preview_src, *field_values):
+        if not n_clicks:
+            return dash.no_update
+        data_uri = snapshot_data or preview_src or ""
+        kwargs = config.build_kwargs(tuple(field_values))
+        callback(data_uri, **kwargs)
+        return dash.no_update
+
+
 # ---------------------------------------------------------------------------
 # Main assembly: build wizard + register all callbacks
 # ---------------------------------------------------------------------------
@@ -371,6 +398,7 @@ def wire_wizard(
     capture_resolver: Callable | None = None,
     show_format: bool = True,
     wizard_header: str | Any = "Capture",
+    actions: list | None = None,
 ) -> html.Div:
     """Build the wizard layout and register all callbacks."""
     config_id = ids["cfg"]
@@ -387,6 +415,12 @@ def wire_wizard(
     snapshot_store_id = ids["snapshot"]
     format_id = ids["format"]
     resolved_store_id = ids.get("resolved")
+
+    actions = actions or []
+    action_ids = [
+        (f"_dcap_action_{i}_{wizard_id}", action.label)
+        for i, action in enumerate(actions)
+    ]
 
     # --- Layout ---
     menu = build_dropdown(
@@ -429,6 +463,7 @@ def wire_wizard(
         class_names,
         resolved_store_id=resolved_store_id,
         show_format=show_format,
+        action_button_ids=action_ids,
     )
 
     wizard = build_wizard(
@@ -517,5 +552,14 @@ def wire_wizard(
 
     _register_download(download_id, preview_id, format_id, filename)
     _register_copy_to_clipboard(copy_id, preview_id)
+
+    for (btn_id, _label), action in zip(action_ids, actions, strict=False):
+        _register_custom_action(
+            btn_id=btn_id,
+            preview_id=preview_id,
+            snapshot_store_id=snapshot_store_id,
+            config=config,
+            callback=action.callback,
+        )
 
     return wizard.div

@@ -85,6 +85,29 @@ class CaptureBinding:
     element_id: str
 
 
+@dataclass
+class WizardAction:
+    """Custom action button for the capture wizard.
+
+    Placed alongside the built-in Download and Copy buttons.  The
+    *callback* receives the captured data-URI and any extra-field values.
+
+    Parameters
+    ----------
+    label : str
+        Button text shown in the wizard (e.g. ``"Add to Report"``).
+    callback : callable
+        ``callback(data_uri: str, **extra_fields) -> Any``.
+        Return value is currently ignored.
+    icon : str, optional
+        Reserved for future icon support.
+    """
+
+    label: str
+    callback: Callable
+    icon: str | None = None
+
+
 def capture_binding(
     element: str | Any,
     strategy: CaptureStrategy | None = None,
@@ -143,6 +166,7 @@ def _make_wizard(
     capture_resolver: Callable | None = None,
     show_format: bool = True,
     wizard_header: str | Any = "Capture",
+    actions: list[WizardAction] | None = None,
 ) -> html.Div:
     """Shared implementation for ``capture_graph`` and ``capture_element``."""
     if preprocess is not None:
@@ -230,6 +254,7 @@ def _make_wizard(
         capture_resolver=capture_resolver,
         show_format=show_format,
         wizard_header=wizard_header,
+        actions=actions or [],
     )
 
     if modebar_bridge is not None:
@@ -253,6 +278,7 @@ def capture_graph(
     capture_resolver: Callable | None = None,
     show_format: bool = True,
     wizard_header: str | Any = "Capture",
+    actions: list[WizardAction] | None = None,
 ) -> html.Div:
     """Capture wizard for a ``dcc.Graph``.
 
@@ -290,6 +316,8 @@ def capture_graph(
         ``capture_*`` options (e.g. ``{"capture_width": 520}``).
     show_format : bool
         Show the format dropdown (default ``True``).
+    actions : list[WizardAction], optional
+        Additional action buttons shown alongside Download and Copy.
 
     Returns
     -------
@@ -332,6 +360,7 @@ def capture_graph(
         capture_resolver=capture_resolver,
         show_format=show_format,
         wizard_header=wizard_header,
+        actions=actions,
     )
 
 
@@ -351,6 +380,7 @@ def capture_element(
     capture_resolver: Callable | None = None,
     show_format: bool = True,
     wizard_header: str | Any = "Capture",
+    actions: list[WizardAction] | None = None,
 ) -> html.Div:
     """Capture wizard for any Dash component (html2canvas by default).
 
@@ -418,6 +448,7 @@ def capture_element(
         capture_resolver=capture_resolver,
         show_format=show_format,
         wizard_header=wizard_header,
+        actions=actions,
     )
 
     if getattr(strategy, "capture", "") == _HTML2CANVAS_CAPTURE:

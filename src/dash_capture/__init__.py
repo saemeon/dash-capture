@@ -20,6 +20,7 @@ from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
+    WizardAction,
     capture_binding,
     capture_element,
     capture_graph,
@@ -49,4 +50,6 @@ __all__ = [
     "ModebarIcon",
     # hooks
     "FromPlotly",
+    # wizard extensibility
+    "WizardAction",
 ]
