@@ -165,6 +165,31 @@ def figdata_renderer(
     _target.write(text.encode())
 
 
+def table_titled_renderer(
+    _target,
+    _snapshot_img,
+    title: str = "Country statistics",
+    report_date: date = date(2026, 4, 8),
+):
+    """Add a title bar above a captured table.
+
+    str → text input, date → date picker (auto-generated from type hints).
+    Used to showcase a table-specific renderer in the table examples.
+    """
+    from PIL import Image, ImageDraw
+
+    img = Image.open(io.BytesIO(_snapshot_img()))
+    bar_h = 50
+    new = Image.new("RGB", (img.width, img.height + bar_h), "white")
+    new.paste(img, (0, bar_h))
+    draw = ImageDraw.Draw(new)
+    draw.text((10, 10), title, fill="black")
+    draw.text((10, 28), str(report_date), fill="gray")
+    buf = io.BytesIO()
+    new.save(buf, format="PNG")
+    _target.write(buf.getvalue())
+
+
 def error_renderer(
     _target,
     _snapshot_img,
@@ -312,8 +337,7 @@ app.layout = html.Div(
                     "demo-graph",
                     renderer=passthrough,
                     trigger="Capture (stripped)",
-                    strip_title=True,
-                    strip_legend=True,
+                    strategy=plotly_strategy(strip_title=True, strip_legend=True),
                 ),
             ],
         ),
@@ -376,19 +400,26 @@ app.layout = html.Div(
                 html.Br(),
                 html.Br(),
                 capture_element(
-                    "demo-table", renderer=passthrough, trigger="Capture table"
+                    "demo-table",
+                    renderer=passthrough,
+                    trigger="Capture table",
+                    filename="country-table.png",
                 ),
             ],
         ),
         html.Div(
             style=SECTION,
             children=[
-                html.H4("10. Table → PIL border + title"),
-                html.P("Same border renderer from example 3, but applied to a table."),
+                html.H4("10. Table → PIL title bar"),
+                html.P(
+                    "Renderer adds a title and date bar above the captured table. "
+                    "Auto-generated form fields: text input + date picker."
+                ),
                 capture_element(
                     "demo-table",
-                    renderer=literal_and_bool_renderer,
-                    trigger="Capture table (styled)",
+                    renderer=table_titled_renderer,
+                    trigger="Capture table (with title)",
+                    filename="country-table-titled.png",
                 ),
             ],
         ),

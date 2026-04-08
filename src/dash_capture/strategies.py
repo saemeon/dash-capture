@@ -140,14 +140,14 @@ _HTML2CANVAS_CAPTURE = """\
                     useCORS: true,
                     logging: false
                 });
-                const fmt = opts.format || 'png';
-                const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/' + fmt;
+                const mime = opts.format === 'jpg'
+                    ? 'image/jpeg' : 'image/' + (opts.format || 'png');
                 return canvas.toDataURL(mime, opts.quality || undefined);"""
 
 _CANVAS_CAPTURE = """\
                 const cvs = el.querySelector('canvas') || el;
-                const fmt = opts.format || 'png';
-                const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/' + fmt;
+                const mime = opts.format === 'jpg'
+                    ? 'image/jpeg' : 'image/' + (opts.format || 'png');
                 return cvs.toDataURL(mime, opts.quality || undefined);"""
 
 

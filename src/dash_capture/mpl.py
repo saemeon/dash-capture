@@ -1,13 +1,24 @@
 # Copyright (c) Simon Niederberger.
 # Distributed under the terms of the MIT License.
 
-"""Matplotlib renderers for use with :func:`dash_capture.capture_graph`."""
+"""Matplotlib renderers for use with :func:`dash_capture.capture_graph`.
+
+Optional submodule — requires the ``mpl`` extra::
+
+    pip install dash-capture[mpl]
+"""
 
 from __future__ import annotations
 
 import io
 
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ImportError as e:  # pragma: no cover
+    raise ImportError(
+        "dash_capture.mpl requires matplotlib. "
+        "Install it with: pip install 'dash-capture[mpl]'"
+    ) from e
 
 plt.switch_backend("agg")
 

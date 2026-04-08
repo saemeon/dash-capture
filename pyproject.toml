@@ -23,9 +23,11 @@ requires-python = ">=3.10"
 dependencies = [
     "dash-fn-form",
     "dash>=4.0.0",
-    "matplotlib>=3.10.8",
     "plotly>=6.6.0",
 ]
+
+[project.optional-dependencies]
+mpl = ["matplotlib>=3.10.8"]
 
 [project.urls]
 Homepage = "https://github.com/saemeon/dash-capture"

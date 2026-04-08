@@ -66,6 +66,17 @@ def _get_nested(data: Any, path: str) -> Any:
     return data
 
 
+def _default_renderer(_target, _snapshot_img):
+    """Default capture renderer: write captured bytes straight to the target.
+
+    Used by :func:`capture_graph` and :func:`capture_element` when
+    ``renderer`` is ``None``.  Has no extra parameters, so the wizard
+    collapses to just *Generate* + *Download*.  No third-party
+    dependencies — always works.
+    """
+    _target.write(_snapshot_img())
+
+
 @dataclass
 class CaptureBinding:
     """Low-level capture wiring: JS capture → ``dcc.Store``.
@@ -291,7 +302,9 @@ def capture_graph(
         The graph component or its string ``id``.
     renderer : callable, optional
         Function with ``(_target, _snapshot_img, **fields)`` signature.
-        Defaults to ``dash_capture.mpl.snapshot_renderer``.
+        Defaults to a passthrough that writes the captured bytes
+        unchanged — the wizard then shows just *Generate* + *Download*
+        with no extra fields.
     trigger : str, Dash component, or ModebarButton
         String label, custom component, ``"modebar"``, or :class:`ModebarButton`.
     strategy : CaptureStrategy, optional
@@ -334,9 +347,7 @@ def capture_graph(
     ... )
     """
     if renderer is None:
-        from dash_capture.mpl import snapshot_renderer
-
-        renderer = snapshot_renderer
+        renderer = _default_renderer
 
     graph_id = graph if isinstance(graph, str) else cast(Any, graph).id
 
@@ -389,7 +400,8 @@ def capture_element(
     component : str or Dash component
         Any Dash component with an ``id``, or a string ID.
     renderer : callable, optional
-        See :func:`capture_graph` for the protocol.
+        See :func:`capture_graph` for the protocol.  Defaults to a
+        passthrough that writes the captured bytes unchanged.
     trigger : str or Dash component
         String label or custom component with ``n_clicks``.
     strategy : CaptureStrategy, optional
@@ -423,9 +435,7 @@ def capture_element(
     >>> wizard = capture_element("my-div", trigger="Screenshot")
     """
     if renderer is None:
-        from dash_capture.mpl import snapshot_renderer
-
-        renderer = snapshot_renderer
+        renderer = _default_renderer
 
     comp_id = component if isinstance(component, str) else cast(Any, component).id
 
