@@ -3,6 +3,9 @@
 
 """Tests for dash_capture.capture — core capture API."""
 
+import inspect
+import io
+
 from dash import dcc, html
 from dash_fn_form import FieldHook, FromComponent
 
@@ -10,8 +13,10 @@ from dash_capture._wizard_callbacks import _make_snapshot_fn, _to_src
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
+    _default_renderer,
     _get_nested,
     capture_binding,
+    capture_element,
     capture_graph,
 )
 
@@ -151,3 +156,79 @@ class TestCaptureGraph:
             strategy=plotly_strategy(strip_title=True, strip_legend=True),
         )
         assert isinstance(result, html.Div)
+
+
+# ---------------------------------------------------------------------------
+# Default renderer (passthrough)
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultRenderer:
+    """The default renderer is a zero-dependency passthrough.
+
+    It must:
+      - write the captured bytes through unchanged
+      - take only ``(_target, _snapshot_img)`` so the wizard shows no
+        form fields (just Generate + Download)
+      - be importable without matplotlib (regression for the historic
+        ``from dash_capture.mpl import snapshot_renderer`` default)
+    """
+
+    def test_writes_bytes_unchanged(self):
+        target = io.BytesIO()
+        payload = b"\x89PNG\r\n\x1a\nfake-image-data"
+        _default_renderer(target, lambda: payload)
+        assert target.getvalue() == payload
+
+    def test_signature_has_no_form_fields(self):
+        params = inspect.signature(_default_renderer).parameters
+        # Only the two magic params, no user-facing fields
+        assert list(params) == ["_target", "_snapshot_img"]
+
+    def test_used_by_capture_graph_when_renderer_none(self):
+        # Construct a wizard with no explicit renderer; the form must
+        # have zero generated fields because _default_renderer has none.
+        result = capture_graph("g-default")
+        assert isinstance(result, html.Div)
+
+    def test_used_by_capture_element_when_renderer_none(self):
+        result = capture_element("el-default")
+        assert isinstance(result, html.Div)
+
+    def test_no_matplotlib_import_in_capture_module(self):
+        # Regression guard: capture.py must not import matplotlib at any
+        # scope (module-level OR inside a function), because the default
+        # renderer must work without the [mpl] extra installed. Historic
+        # bug: capture_graph used to do `from dash_capture.mpl import
+        # snapshot_renderer` inside `if renderer is None:`, which forced
+        # matplotlib on every default user.
+        import ast
+        import pathlib
+
+        import dash_capture.capture
+
+        source = pathlib.Path(dash_capture.capture.__file__).read_text()
+        tree = ast.parse(source)
+        offenders: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                offenders.extend(
+                    f"line {node.lineno}: import {alias.name}"
+                    for alias in node.names
+                    if alias.name == "matplotlib"
+                    or alias.name.startswith("matplotlib.")
+                )
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and (
+                    node.module == "matplotlib"
+                    or node.module.startswith("matplotlib.")
+                    or node.module == "dash_capture.mpl"
+                )
+            ):
+                offenders.append(f"line {node.lineno}: from {node.module} import ...")
+        assert not offenders, (
+            "dash_capture.capture must not import matplotlib (or "
+            "dash_capture.mpl) at any scope. Offenders:\n  " + "\n  ".join(offenders)
+        )

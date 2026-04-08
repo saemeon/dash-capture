@@ -3,6 +3,12 @@
 
 """Tests for dash_capture.strategies — JS fragment generation."""
 
+import re
+import shutil
+import subprocess
+
+import pytest
+
 from dash_capture.strategies import (
     CaptureStrategy,
     _build_strip_patches,
@@ -239,6 +245,132 @@ class TestBuildCaptureJs:
         js = build_capture_js("test'; alert('xss');//", s, [], {})
         assert "alert" in js  # string is present but escaped
         assert "\\'" in js  # single quote is escaped
+
+
+# ---------------------------------------------------------------------------
+# JS validity (regression guards)
+# ---------------------------------------------------------------------------
+
+
+def _extract_function_params(js: str) -> list[str]:
+    """Extract parameter names from the first ``async function(...)`` line."""
+    m = re.search(r"async function\s*\(([^)]*)\)", js)
+    if not m:
+        return []
+    raw = m.group(1).strip()
+    if not raw:
+        return []
+    return [p.strip() for p in raw.split(",")]
+
+
+def _find_const_let_var_redeclarations(js: str, params: list[str]) -> list[str]:
+    """Return any ``const|let|var <param>`` declarations colliding with params."""
+    # Word-boundary match for `const p`, `let p`, `var p`
+    return [
+        p for p in params if re.search(rf"\b(?:const|let|var)\s+{re.escape(p)}\b", js)
+    ]
+
+
+def _all_built_in_strategy_js() -> list[tuple[str, str]]:
+    """Return ``(label, js)`` pairs for every built-in strategy combo.
+
+    Covers the strategy ``x`` format ``x`` strip-patch matrix that
+    ``build_capture_js`` actually emits in production.
+    """
+    cases: list[tuple[str, str]] = []
+    for label, strat in [
+        ("plotly_simple", plotly_strategy()),
+        ("plotly_jpeg", plotly_strategy(format="jpeg")),
+        ("plotly_svg", plotly_strategy(format="svg")),
+        ("plotly_strip_title", plotly_strategy(strip_title=True)),
+        (
+            "plotly_strip_all",
+            plotly_strategy(
+                strip_title=True,
+                strip_legend=True,
+                strip_annotations=True,
+                strip_axis_titles=True,
+                strip_colorbar=True,
+                strip_margin=True,
+            ),
+        ),
+        ("html2canvas", html2canvas_strategy()),
+        ("html2canvas_jpeg", html2canvas_strategy(format="jpeg")),
+        ("canvas", canvas_strategy()),
+        ("canvas_webp", canvas_strategy(format="webp")),
+    ]:
+        # Two flavors per strategy: with and without active capture params
+        cases.append((label, build_capture_js("test-id", strat, [], {})))
+        cases.append(
+            (
+                f"{label}+capture_params",
+                build_capture_js(
+                    "test-id", strat, ["capture_width", "capture_height"], {}
+                ),
+            )
+        )
+    return cases
+
+
+class TestGeneratedJsValidity:
+    """Regression guards for the generated clientside-callback JS.
+
+    Two layers:
+
+    1. **Identifier-collision guard** (always runs, no deps): catches the
+       specific bug class where a function parameter name is also
+       redeclared with ``const`` / ``let`` / ``var`` inside the body.
+       Concrete example: the ``fmt`` collision in ``_HTML2CANVAS_CAPTURE``
+       and ``_CANVAS_CAPTURE`` introduced when the format dropdown started
+       passing ``fmt`` as a clientside-callback argument.
+
+    2. **Full syntax check via Node** (skipped if node not on PATH):
+       compiles the JS body with ``new Function(...)`` and reports any
+       SyntaxError. Catches anything else the regex might miss.
+    """
+
+    @pytest.mark.parametrize(
+        "label,js",
+        _all_built_in_strategy_js(),
+        ids=lambda x: x if isinstance(x, str) else "",
+    )
+    def test_no_param_redeclarations(self, label: str, js: str):
+        params = _extract_function_params(js)
+        assert params, f"{label}: failed to extract params from generated JS"
+        offenders = _find_const_let_var_redeclarations(js, params)
+        assert not offenders, (
+            f"{label}: parameters {offenders} are redeclared as const/let/var "
+            f"inside the function body — this is a SyntaxError in strict mode "
+            f"and silently breaks the clientside callback."
+            f"\n\nGenerated JS:\n{js}"
+        )
+
+    @pytest.mark.skipif(
+        shutil.which("node") is None,
+        reason="node executable not available — skipping JS syntax check",
+    )
+    @pytest.mark.parametrize(
+        "label,js",
+        _all_built_in_strategy_js(),
+        ids=lambda x: x if isinstance(x, str) else "",
+    )
+    def test_parses_in_node(self, tmp_path, label: str, js: str):
+        # Wrap the bare `async function(...) {}` as a function expression
+        # assigned to a variable so it parses as a top-level statement.
+        # `node --check` only validates syntax, no execution.
+        source = f"const _f = {js.strip()};\n"
+        f = tmp_path / "snippet.js"
+        f.write_text(source)
+        result = subprocess.run(
+            ["node", "--check", str(f)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, (
+            f"{label}: generated JS failed to parse in node.\n"
+            f"stderr: {result.stderr}\n\nGenerated JS:\n{source}"
+        )
 
 
 # ---------------------------------------------------------------------------
