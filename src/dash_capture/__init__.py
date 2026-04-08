@@ -24,6 +24,7 @@ from dash_capture.capture import (
     capture_binding,
     capture_element,
     capture_graph,
+    renderer,
 )
 from dash_capture.strategies import (
     CaptureStrategy,
@@ -39,6 +40,8 @@ __all__ = [
     # high-level (wizard)
     "capture_graph",
     "capture_element",
+    # renderer protocol
+    "renderer",
     # strategies
     "CaptureStrategy",
     "plotly_strategy",

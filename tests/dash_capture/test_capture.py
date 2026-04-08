@@ -6,6 +6,7 @@
 import inspect
 import io
 
+import pytest
 from dash import dcc, html
 from dash_fn_form import FieldHook, FromComponent
 
@@ -13,11 +14,17 @@ from dash_capture._wizard_callbacks import _make_snapshot_fn, _to_src
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
+    _classify_params,
     _default_renderer,
     _get_nested,
+    _NullFnForm,
+    _renderer_meta,
+    _RendererMeta,
+    _resolve_show_format,
     capture_binding,
     capture_element,
     capture_graph,
+    renderer,
 )
 
 # ---------------------------------------------------------------------------
@@ -171,7 +178,7 @@ class TestDefaultRenderer:
       - take only ``(_target, _snapshot_img)`` so the wizard shows no
         form fields (just Generate + Download)
       - be importable without matplotlib (regression for the historic
-        ``from dash_capture.mpl import snapshot_renderer`` default)
+        default that forced matplotlib on every user)
     """
 
     def test_writes_bytes_unchanged(self):
@@ -198,8 +205,8 @@ class TestDefaultRenderer:
     def test_no_matplotlib_import_in_capture_module(self):
         # Regression guard: capture.py must not import matplotlib at any
         # scope (module-level OR inside a function), because the default
-        # renderer must work without the [mpl] extra installed. Historic
-        # bug: capture_graph used to do `from dash_capture.mpl import
+        # renderer must work without matplotlib installed. Historic bug:
+        # capture_graph used to do `from dash_capture.mpl import
         # snapshot_renderer` inside `if renderer is None:`, which forced
         # matplotlib on every default user.
         import ast
@@ -222,13 +229,445 @@ class TestDefaultRenderer:
                 isinstance(node, ast.ImportFrom)
                 and node.module
                 and (
-                    node.module == "matplotlib"
-                    or node.module.startswith("matplotlib.")
-                    or node.module == "dash_capture.mpl"
+                    node.module == "matplotlib" or node.module.startswith("matplotlib.")
                 )
             ):
                 offenders.append(f"line {node.lineno}: from {node.module} import ...")
         assert not offenders, (
-            "dash_capture.capture must not import matplotlib (or "
-            "dash_capture.mpl) at any scope. Offenders:\n  " + "\n  ".join(offenders)
+            "dash_capture.capture must not import matplotlib at any scope. "
+            "Offenders:\n  " + "\n  ".join(offenders)
         )
+
+
+# ---------------------------------------------------------------------------
+# show_format auto-resolution
+# ---------------------------------------------------------------------------
+
+
+def _find_format_dropdown_style(
+    layout: html.Div, format_id_prefix: str = "_dcap_format_"
+):
+    """Walk a wizard layout tree and return the style dict of the div
+    that wraps the format dropdown — i.e. the parent of any component
+    whose id starts with ``_dcap_format_``. Returns ``None`` if no
+    format dropdown is present in the tree.
+    """
+
+    def walk(node):
+        if hasattr(node, "children"):
+            children = node.children
+            if children is None:
+                return None
+            if not isinstance(children, list | tuple):
+                children = [children]
+            for child in children:
+                # Found the format dropdown — return *this* node's style
+                # (the parent div is what gets display:none).
+                if (
+                    getattr(child, "id", None)
+                    and isinstance(child.id, str)
+                    and child.id.startswith(format_id_prefix)
+                ):
+                    return getattr(node, "style", None)
+                found = walk(child)
+                if found is not None:
+                    return found
+        return None
+
+    return walk(layout)
+
+
+class TestResolveShowFormat:
+    """Unit tests for the show_format auto-resolution helper.
+
+    The rule is: ``None`` (the default) means "auto" — show iff the
+    renderer produces an image. Explicit ``True`` / ``False`` always
+    overrides the auto behavior.
+    """
+
+    def test_none_with_snapshot_resolves_true(self):
+        assert _resolve_show_format(None, has_snapshot=True) is True
+
+    def test_none_without_snapshot_resolves_false(self):
+        assert _resolve_show_format(None, has_snapshot=False) is False
+
+    def test_explicit_true_overrides_auto(self):
+        # User can force the dropdown on even for fig-data-only renderers
+        assert _resolve_show_format(True, has_snapshot=False) is True
+
+    def test_explicit_false_overrides_auto(self):
+        # User can force the dropdown off even for snapshot renderers
+        assert _resolve_show_format(False, has_snapshot=True) is False
+
+
+class TestShowFormatInWizard:
+    """End-to-end checks: build a wizard with various renderers and
+    verify the format dropdown's display style matches the auto-rule.
+    """
+
+    def test_snapshot_renderer_shows_format(self):
+        # Default renderer takes _snapshot_img → format dropdown visible
+        wizard = capture_graph("g-fmt-snap")
+        style = _find_format_dropdown_style(wizard)
+        assert style is not None, "format dropdown not found in wizard tree"
+        assert style.get("display") != "none", (
+            f"snapshot renderer should show the format dropdown, got style={style}"
+        )
+
+    def test_fig_data_only_renderer_hides_format(self):
+        def fig_only_renderer(_target, _fig_data):
+            _target.write(b"")
+
+        wizard = capture_graph("g-fmt-fig", renderer=fig_only_renderer)
+        style = _find_format_dropdown_style(wizard)
+        assert style is not None, "format dropdown div not found in wizard tree"
+        assert style.get("display") == "none", (
+            f"fig-data-only renderer should hide the format dropdown, got style={style}"
+        )
+
+    def test_explicit_show_format_false_hides_for_snapshot(self):
+        def snap_renderer(_target, _snapshot_img):
+            _target.write(_snapshot_img())
+
+        wizard = capture_graph(
+            "g-fmt-explicit-false",
+            renderer=snap_renderer,
+            show_format=False,
+        )
+        style = _find_format_dropdown_style(wizard)
+        assert style is not None
+        assert style.get("display") == "none"
+
+    def test_explicit_show_format_true_shows_for_fig_data(self):
+        def fig_only_renderer(_target, _fig_data):
+            _target.write(b"")
+
+        wizard = capture_graph(
+            "g-fmt-explicit-true",
+            renderer=fig_only_renderer,
+            show_format=True,
+        )
+        style = _find_format_dropdown_style(wizard)
+        assert style is not None
+        assert style.get("display") != "none"
+
+
+# ---------------------------------------------------------------------------
+# @renderer decorator + _classify_params + _renderer_meta
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyParams:
+    """``_classify_params`` walks a renderer's signature without validation."""
+
+    def test_snapshot_only(self):
+        def fn(_target, _snapshot_img):
+            pass
+
+        meta = _classify_params(fn)
+        assert meta.has_snapshot is True
+        assert meta.has_fig_data is False
+        assert meta.active_capture == ()
+        assert meta.fields == ()
+
+    def test_fig_data_only(self):
+        def fn(_target, _fig_data):
+            pass
+
+        meta = _classify_params(fn)
+        assert meta.has_snapshot is False
+        assert meta.has_fig_data is True
+        assert meta.fields == ()
+
+    def test_both_magic_plus_user_fields(self):
+        def fn(_target, _snapshot_img, _fig_data, title: str = "", dpi: int = 150):
+            pass
+
+        meta = _classify_params(fn)
+        assert meta.has_snapshot is True
+        assert meta.has_fig_data is True
+        assert meta.fields == ("title", "dpi")
+
+    def test_active_capture_params(self):
+        def fn(
+            _target, _snapshot_img, capture_width: int = 800, capture_height: int = 600
+        ):
+            pass
+
+        meta = _classify_params(fn)
+        assert meta.active_capture == ("capture_width", "capture_height")
+        # capture_* params are NOT user fields — they're plumbed to the JS layer
+        assert meta.fields == ()
+
+    def test_user_fields_only_no_magic(self):
+        # Renderer that takes _target and a regular field — no snapshot, no fig_data
+        def fn(_target, message: str = ""):
+            pass
+
+        meta = _classify_params(fn)
+        assert meta.has_snapshot is False
+        assert meta.has_fig_data is False
+        assert meta.fields == ("message",)
+
+
+class TestRendererDecorator:
+    """``@renderer`` validates magic names and attaches __dcap_meta__."""
+
+    def test_returns_function_unchanged(self):
+        def fn(_target, _snapshot_img):
+            pass
+
+        decorated = renderer(fn)
+        assert decorated is fn  # same object, no wrapping
+
+    def test_attaches_meta(self):
+        @renderer
+        def fn(_target, _snapshot_img, title: str = ""):
+            pass
+
+        meta = fn.__dcap_meta__
+        assert isinstance(meta, _RendererMeta)
+        assert meta.has_snapshot is True
+        assert meta.fields == ("title",)
+
+    def test_callable_after_decoration(self):
+        @renderer
+        def fn(_target, _snapshot_img):
+            _target.write(_snapshot_img())
+
+        target = io.BytesIO()
+        fn(target, lambda: b"hello")
+        assert target.getvalue() == b"hello"
+
+    def test_raises_when_target_missing(self):
+        def fn(_snapshot_img):
+            pass
+
+        with pytest.raises(ValueError, match="must declare a ``_target``"):
+            renderer(fn)
+
+    def test_raises_on_typo_with_suggestion(self):
+        def fn(_target, _snaphot_img):  # typo: missing 's'
+            pass
+
+        with pytest.raises(ValueError) as exc_info:
+            renderer(fn)
+        msg = str(exc_info.value)
+        assert "_snaphot_img" in msg
+        assert "Did you mean" in msg
+        assert "_snapshot_img" in msg  # difflib suggestion
+
+    def test_raises_on_unknown_magic_param(self):
+        def fn(_target, _wat):
+            pass
+
+        with pytest.raises(ValueError, match="unknown magic parameter"):
+            renderer(fn)
+
+    def test_raises_on_image_typo(self):
+        def fn(_target, _snapshot_image):  # extra 'image' suffix
+            pass
+
+        with pytest.raises(ValueError) as exc_info:
+            renderer(fn)
+        assert "_snapshot_image" in str(exc_info.value)
+
+    def test_accepts_capture_star_params(self):
+        @renderer
+        def fn(_target, _snapshot_img, capture_width: int = 800):
+            pass
+
+        # capture_* doesn't start with `_` so it's not subject to the magic-name
+        # whitelist; should pass validation and end up in active_capture
+        assert fn.__dcap_meta__.active_capture == ("capture_width",)
+        assert fn.__dcap_meta__.fields == ()
+
+    def test_accepts_minimal_target_only(self):
+        # A renderer with just _target is valid (writes constant content)
+        @renderer
+        def fn(_target):
+            _target.write(b"const")
+
+        assert fn.__dcap_meta__.has_snapshot is False
+        assert fn.__dcap_meta__.has_fig_data is False
+
+
+class TestRendererMeta:
+    """``_renderer_meta`` reads cached attribute or falls back to lazy compute."""
+
+    def test_uses_cached_meta_if_decorated(self):
+        @renderer
+        def fn(_target, _snapshot_img, title: str = ""):
+            pass
+
+        cached = fn.__dcap_meta__
+        meta = _renderer_meta(fn)
+        assert meta is cached  # exact same object — no recomputation
+
+    def test_lazy_fallback_for_undecorated(self):
+        def fn(_target, _snapshot_img, title: str = ""):
+            pass
+
+        # No __dcap_meta__ attribute → must compute lazily
+        assert not hasattr(fn, "__dcap_meta__")
+        meta = _renderer_meta(fn)
+        assert meta.has_snapshot is True
+        assert meta.fields == ("title",)
+
+    def test_lazy_fallback_for_default_renderer(self):
+        # _default_renderer is intentionally not decorated; verify the
+        # lazy path works for it.
+        meta = _renderer_meta(_default_renderer)
+        assert meta.has_snapshot is True
+        assert meta.fields == ()
+
+
+# ---------------------------------------------------------------------------
+# No-fields short-circuit (_NullFnForm)
+# ---------------------------------------------------------------------------
+
+
+def _find_config_in_wizard(wizard: html.Div):
+    """Walk a wizard tree and return the first object with a non-trivial
+    ``states`` attribute (i.e. the FnForm-or-stub config component).
+    Returns None if no such component is found.
+    """
+    seen = set()
+
+    def walk(node):
+        if id(node) in seen:
+            return None
+        seen.add(id(node))
+        # Any component carrying a `.states` attribute is a form-config
+        if hasattr(node, "states") and isinstance(getattr(node, "states", None), list):
+            return node
+        if hasattr(node, "children"):
+            children = node.children
+            if children is None:
+                return None
+            if not isinstance(children, list | tuple):
+                children = [children]
+            for child in children:
+                found = walk(child)
+                if found is not None:
+                    return found
+        return None
+
+    return walk(wizard)
+
+
+class TestNullFnForm:
+    """``_NullFnForm`` is a drop-in stub for FnForm with zero fields."""
+
+    def test_is_dash_div_subclass(self):
+        # Must be placeable directly in a Dash layout tree
+        assert issubclass(_NullFnForm, html.Div)
+
+    def test_construction_sets_id(self):
+        stub = _NullFnForm("my-config-id")
+        assert stub.id == "my-config-id"
+
+    def test_states_is_empty_list(self):
+        stub = _NullFnForm("c")
+        assert stub.states == []
+
+    def test_register_callbacks_are_noop(self):
+        stub = _NullFnForm("c")
+        # Should not raise — no-op
+        stub.register_populate_callback(None)
+        stub.register_restore_callback(None)
+
+    def test_build_kwargs_returns_empty(self):
+        stub = _NullFnForm("c")
+        assert stub.build_kwargs(()) == {}
+        assert stub.build_kwargs(("ignored",)) == {}
+
+
+class TestNoFieldsShortCircuit:
+    """When the renderer has no form fields, _make_wizard must skip
+    FnForm entirely and use the lightweight _NullFnForm stub.
+    """
+
+    def test_default_renderer_uses_null_stub(self):
+        # capture_graph() with no renderer override → _default_renderer →
+        # zero fields → _NullFnForm short-circuit
+        wizard = capture_graph("g-shortcut-default")
+        config = _find_config_in_wizard(wizard)
+        assert config is not None
+        assert isinstance(config, _NullFnForm)
+
+    def test_capture_element_default_uses_null_stub(self):
+        wizard = capture_element("el-shortcut-default")
+        config = _find_config_in_wizard(wizard)
+        assert config is not None
+        assert isinstance(config, _NullFnForm)
+
+    def test_renderer_with_field_uses_real_fnform(self):
+        # Renderer with a user field → must NOT short-circuit, must use FnForm
+        from dash_fn_form import FnForm
+
+        def with_title(_target, _snapshot_img, title: str = ""):
+            _target.write(_snapshot_img())
+
+        wizard = capture_graph("g-shortcut-fnform", renderer=with_title)
+        config = _find_config_in_wizard(wizard)
+        assert config is not None
+        assert isinstance(config, FnForm)
+        assert not isinstance(config, _NullFnForm)
+
+    def test_does_not_invoke_fnform_for_default_renderer(self):
+        # Stronger guard: if FnForm is constructed at all on the default
+        # path, this test fails. Patch dash_capture.capture.FnForm with a
+        # spy that records calls.
+        from dash_fn_form import FnForm as RealFnForm
+
+        import dash_capture.capture as cap_module
+
+        calls: list[tuple] = []
+
+        class SpyFnForm(RealFnForm):
+            def __init__(self, *args, **kwargs):
+                calls.append((args, kwargs))
+                super().__init__(*args, **kwargs)
+
+        original = cap_module.FnForm
+        cap_module.FnForm = SpyFnForm  # type: ignore[misc]
+        try:
+            capture_graph("g-shortcut-spy")
+        finally:
+            cap_module.FnForm = original  # type: ignore[misc]
+
+        assert calls == [], (
+            f"FnForm should not be constructed for the default no-fields "
+            f"renderer; got {len(calls)} call(s): {calls}"
+        )
+
+    def test_does_invoke_fnform_when_user_passes_field_specs(self):
+        # Even if the renderer has zero fields, an explicit field_specs
+        # arg means the user wants form behavior — don't short-circuit.
+        from dash_fn_form import Field
+
+        def no_field_renderer(_target, _snapshot_img):
+            _target.write(_snapshot_img())
+
+        wizard = capture_graph(
+            "g-shortcut-explicit-specs",
+            renderer=no_field_renderer,
+            field_specs={"some_field": Field()},
+        )
+        config = _find_config_in_wizard(wizard)
+        assert config is not None
+        # Real FnForm — not the stub — because field_specs was explicit
+        from dash_fn_form import FnForm
+
+        assert isinstance(config, FnForm)
+        assert not isinstance(config, _NullFnForm)
+
+    def test_short_circuit_wizard_still_renders_format_dropdown(self):
+        # The format dropdown is independent of FnForm — verify it still
+        # appears in the no-fields short-circuit path (since the default
+        # renderer produces an image).
+        wizard = capture_graph("g-shortcut-fmt")
+        style = _find_format_dropdown_style(wizard)
+        assert style is not None
+        assert style.get("display") != "none"

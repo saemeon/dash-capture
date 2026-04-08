@@ -383,7 +383,7 @@ def wire_wizard(
     element_id: str,
     strategy: CaptureStrategy,
     renderer: Callable,
-    config: FnForm,
+    config: Any,  # FnForm or dash_capture.capture._NullFnForm — duck-typed
     has_snapshot: bool,
     has_fig_data: bool,
     active_capture: list[str],

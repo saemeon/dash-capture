@@ -77,6 +77,194 @@ def _default_renderer(_target, _snapshot_img):
     _target.write(_snapshot_img())
 
 
+def _resolve_show_format(show_format: bool | None, has_snapshot: bool) -> bool:
+    """Resolve the ``show_format`` argument to a concrete bool.
+
+    ``None`` means "auto": show the format dropdown iff the renderer
+    actually produces an image (``has_snapshot=True``). Renderers that
+    only consume ``_fig_data`` (no screenshot) get the dropdown hidden
+    because the format selector is meaningless when no image is
+    produced. Explicit ``True`` / ``False`` always overrides the auto
+    behavior so users can force the dropdown either way.
+    """
+    if show_format is None:
+        return has_snapshot
+    return show_format
+
+
+# ---------------------------------------------------------------------------
+# Renderer protocol — magic param names
+# ---------------------------------------------------------------------------
+
+#: Underscore-prefixed parameter names a renderer is allowed to declare.
+#: Anything else starting with ``_`` is rejected as a typo by ``@renderer``.
+_KNOWN_MAGIC_PARAMS = frozenset({"_target", "_snapshot_img", "_fig_data"})
+
+
+@dataclass(frozen=True, slots=True)
+class _RendererMeta:
+    """Pre-computed classification of a renderer's parameters.
+
+    Built once at ``@renderer`` decoration time (or lazily by
+    ``_renderer_meta`` for undecorated renderers) and read by
+    ``_make_wizard`` instead of re-walking ``inspect.signature`` at
+    every call site.
+    """
+
+    has_snapshot: bool
+    has_fig_data: bool
+    active_capture: tuple[str, ...]
+    fields: tuple[str, ...]
+
+
+def _classify_params(fn: Callable) -> _RendererMeta:
+    """Walk a renderer's signature and classify each parameter.
+
+    Returns a populated ``_RendererMeta``. Does not validate magic
+    names — that's the decorator's job. ``_make_wizard`` calls this
+    directly for undecorated renderers (backward-compatible).
+    """
+    params = inspect.signature(fn).parameters
+    has_snapshot = "_snapshot_img" in params
+    has_fig_data = "_fig_data" in params
+    active_capture = tuple(p for p in params if p.startswith("capture_"))
+    magic_set = {"_target", "_snapshot_img", "_fig_data", *active_capture}
+    fields = tuple(p for p in params if p not in magic_set)
+    return _RendererMeta(
+        has_snapshot=has_snapshot,
+        has_fig_data=has_fig_data,
+        active_capture=active_capture,
+        fields=fields,
+    )
+
+
+def _renderer_meta(fn: Callable) -> _RendererMeta:
+    """Return cached meta if ``fn`` was decorated with ``@renderer``,
+    otherwise compute it lazily. Backward-compatible with undecorated
+    renderers — the decorator is opt-in.
+    """
+    cached = getattr(fn, "__dcap_meta__", None)
+    if isinstance(cached, _RendererMeta):
+        return cached
+    return _classify_params(fn)
+
+
+class _NullFnForm(html.Div):
+    """Stand-in for ``FnForm`` when the renderer has zero user fields.
+
+    The default :func:`capture_graph` / :func:`capture_element` call
+    uses :func:`_default_renderer`, which has no form fields. Constructing
+    a real :class:`FnForm` for that case is wasted work — it pulls in
+    dash-fn-form's field-generation machinery, registers populate /
+    restore callbacks, and produces an empty UI.
+
+    This stub implements just the surface area that
+    :func:`wire_wizard` and :func:`build_modal_body` need:
+
+    * Inherits from :class:`dash.html.Div` so it can be placed
+      directly in the wizard layout tree.
+    * ``self.states = []`` — empty list drives the existing
+      "no fields" branches in :func:`wire_wizard`
+      (``if config.states ...`` already short-circuits the
+      autogenerate-on-field-change callback).
+    * No-op ``register_populate_callback`` /
+      ``register_restore_callback`` — there are no fields to
+      populate or reset.
+    * ``build_kwargs`` returns ``{}`` — the renderer is called with
+      no extra kwargs.
+
+    Renderers with fields still go through the full FnForm path.
+    """
+
+    def __init__(self, config_id: str):
+        super().__init__(id=config_id, children=[])
+        self.states: list = []
+
+    def register_populate_callback(self, _open_input) -> None:
+        pass
+
+    def register_restore_callback(self, _restore_input) -> None:
+        pass
+
+    def build_kwargs(self, _values) -> dict:
+        return {}
+
+
+def renderer(fn: Callable) -> Callable:
+    """Validate and annotate a dash-capture renderer.
+
+    Use as a decorator on any function passed to :func:`capture_graph`
+    or :func:`capture_element` as the ``renderer=`` argument::
+
+        from dash_capture import capture_graph, renderer
+
+        @renderer
+        def my_renderer(_target, _snapshot_img, title: str = ""):
+            _target.write(_snapshot_img())
+
+    The decorator validates the function's signature **at decoration
+    time** and raises :class:`ValueError` if anything is wrong. This
+    catches the entire class of silent bugs where a typo in a magic
+    parameter name (e.g. ``_snaphot_img``) makes the wizard treat it
+    as a normal form field and the capture pipeline never sees the
+    intended snapshot.
+
+    Validates:
+      * ``_target`` parameter is present (mandatory — the renderer
+        writes its output here).
+      * Every underscore-prefixed parameter is one of the known magic
+        names: ``_target``, ``_snapshot_img``, ``_fig_data``. Typos
+        raise :class:`ValueError` with a "did you mean ...?" hint
+        from :mod:`difflib`.
+
+    On success, attaches a ``__dcap_meta__`` attribute (a frozen
+    dataclass) so the wizard pipeline can read pre-classified
+    parameter info instead of re-walking ``inspect.signature`` at
+    every call site. Returns the original function unmodified
+    otherwise.
+
+    Undecorated renderers still work — the wizard pipeline falls back
+    to lazy on-the-fly introspection. The decorator is opt-in but
+    strongly recommended for any non-trivial renderer.
+    """
+    import difflib
+
+    sig = inspect.signature(fn)
+    params = sig.parameters
+    name = getattr(fn, "__name__", "<renderer>")
+
+    # Validate _target is present
+    if "_target" not in params:
+        raise ValueError(
+            f"Renderer {name!r} must declare a ``_target`` parameter "
+            f"(file-like object the renderer writes its output to). "
+            f"Got parameters: {list(params)}"
+        )
+
+    # Validate underscore-prefixed params are all known magic names
+    underscore = [p for p in params if p.startswith("_")]
+    unknown = [p for p in underscore if p not in _KNOWN_MAGIC_PARAMS]
+    if unknown:
+        suggestions: list[str] = []
+        for typo in unknown:
+            close = difflib.get_close_matches(typo, _KNOWN_MAGIC_PARAMS, n=1)
+            if close:
+                suggestions.append(f"{typo} → {close[0]}")
+        msg = (
+            f"Renderer {name!r} has unknown magic parameter(s): {unknown}. "
+            f"Allowed magic names: {sorted(_KNOWN_MAGIC_PARAMS)}."
+        )
+        if suggestions:
+            msg += f" Did you mean: {', '.join(suggestions)}?"
+        raise ValueError(msg)
+
+    # Compute meta and attach. Use setattr (rather than direct attribute
+    # assignment) so static checkers don't complain about an "unknown"
+    # attribute on a generic Callable.
+    setattr(fn, "__dcap_meta__", _classify_params(fn))  # noqa: B010
+    return fn
+
+
 @dataclass
 class CaptureBinding:
     """Low-level capture wiring: JS capture → ``dcc.Store``.
@@ -175,7 +363,7 @@ def _make_wizard(
     field_specs: dict[str, Field | FieldHook] | None,
     field_components: Any,
     capture_resolver: Callable | None = None,
-    show_format: bool = True,
+    show_format: bool | None = None,
     wizard_header: str | Any = "Capture",
     actions: list[WizardAction] | None = None,
 ) -> html.Div:
@@ -183,18 +371,27 @@ def _make_wizard(
     if preprocess is not None:
         strategy = CaptureStrategy(preprocess=preprocess, capture=strategy.capture)
 
-    params = inspect.signature(renderer).parameters
-    has_snapshot = "_snapshot_img" in params
-    has_fig_data = "_fig_data" in params
-    active_capture = [name for name in params if name.startswith("capture_")]
+    # Read pre-classified renderer metadata. If the renderer was decorated
+    # with ``@renderer`` we use the cached meta from ``__dcap_meta__``;
+    # otherwise we compute it lazily here.
+    meta = _renderer_meta(renderer)
+    has_snapshot = meta.has_snapshot
+    has_fig_data = meta.has_fig_data
+    active_capture = list(meta.active_capture)
     exclude = ["_target", "_snapshot_img", "_fig_data", *active_capture]
 
+    # ``params`` is still needed by ``wire_wizard`` (it's threaded into
+    # ``build_capture_js`` for ``capture_*`` parameter routing).
+    params = inspect.signature(renderer).parameters
+
+    # Auto-disable the format dropdown for fig-data-only renderers — the
+    # selector is meaningless when no image is produced.
+    show_format = _resolve_show_format(show_format, has_snapshot)
+
     if persist:
-        merged_specs: dict[str, Field | FieldHook] = {}
-        for name in params:
-            if name in exclude:
-                continue
-            merged_specs[name] = Field(persist=True)
+        merged_specs: dict[str, Field | FieldHook] = {
+            name: Field(persist=True) for name in meta.fields
+        }
         if field_specs:
             merged_specs.update(field_specs)
         field_specs = merged_specs
@@ -222,16 +419,26 @@ def _make_wizard(
         id_keys.append("resolved")
     ids = {k: f"_dcap_{k}_{uid}" for k in id_keys}
 
-    config = FnForm(
-        ids["cfg"],
-        renderer,
-        _styles=_styles,
-        _class_names=_class_names,
-        _field_specs=field_specs,
-        _show_docstring=False,
-        _exclude=exclude,
-        _field_components=field_components,
-    )
+    # Short-circuit: when the renderer has zero user-visible fields and
+    # the caller hasn't supplied custom field_specs, skip FnForm entirely
+    # and use the lightweight _NullFnForm stub. This is the hot path for
+    # the default passthrough wizard (capture_graph() / capture_element()
+    # with no renderer override) and avoids invoking dash-fn-form's
+    # field-generation machinery.
+    config: html.Div
+    if not meta.fields and not field_specs:
+        config = _NullFnForm(ids["cfg"])
+    else:
+        config = FnForm(
+            ids["cfg"],
+            renderer,
+            _styles=_styles,
+            _class_names=_class_names,
+            _field_specs=field_specs,
+            _show_docstring=False,
+            _exclude=exclude,
+            _field_components=field_components,
+        )
 
     # Modebar trigger
     modebar_bridge = None
@@ -287,7 +494,7 @@ def capture_graph(
     field_specs: dict[str, Field | FieldHook] | None = None,
     field_components: Any = "dcc",
     capture_resolver: Callable | None = None,
-    show_format: bool = True,
+    show_format: bool | None = None,
     wizard_header: str | Any = "Capture",
     actions: list[WizardAction] | None = None,
 ) -> html.Div:
@@ -327,8 +534,11 @@ def capture_graph(
     capture_resolver : callable, optional
         Server-side function receiving form values as kwargs, returning
         ``capture_*`` options (e.g. ``{"capture_width": 520}``).
-    show_format : bool
-        Show the format dropdown (default ``True``).
+    show_format : bool, optional
+        Show the format dropdown. Default ``None`` means auto: shown
+        when the renderer takes ``_snapshot_img`` (image output),
+        hidden for ``_fig_data``-only renderers (no image, format is
+        meaningless). Pass ``True`` / ``False`` to override.
     actions : list[WizardAction], optional
         Additional action buttons shown alongside Download and Copy.
 
@@ -389,7 +599,7 @@ def capture_element(
     field_specs: dict[str, Field | FieldHook] | None = None,
     field_components: Any = "dcc",
     capture_resolver: Callable | None = None,
-    show_format: bool = True,
+    show_format: bool | None = None,
     wizard_header: str | Any = "Capture",
     actions: list[WizardAction] | None = None,
 ) -> html.Div:
@@ -422,8 +632,10 @@ def capture_element(
         Component factory.
     capture_resolver : callable, optional
         See :func:`capture_graph`.
-    show_format : bool
-        Show the format dropdown (default ``True``).
+    show_format : bool, optional
+        Show the format dropdown. Default ``None`` means auto: shown
+        when the renderer takes ``_snapshot_img``, hidden for
+        ``_fig_data``-only renderers. See :func:`capture_graph`.
 
     Returns
     -------

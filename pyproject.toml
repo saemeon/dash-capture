@@ -26,9 +26,6 @@ dependencies = [
     "plotly>=6.6.0",
 ]
 
-[project.optional-dependencies]
-mpl = ["matplotlib>=3.10.8"]
-
 [project.urls]
 Homepage = "https://github.com/saemeon/dash-capture"
 Repository = "https://github.com/saemeon/dash-capture"
