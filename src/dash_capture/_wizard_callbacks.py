@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import io
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import dash
 from dash import Input, Output, State, dcc, html
@@ -19,6 +19,11 @@ from dash_capture._dropdown import build_dropdown
 from dash_capture._wizard import build_wizard
 from dash_capture._wizard_layout import build_modal_body
 from dash_capture.strategies import CaptureStrategy, build_capture_js
+
+if TYPE_CHECKING:
+    # Avoid runtime circular import: capture.py imports wire_wizard from
+    # this module, and this module needs WizardConfig only as a type hint.
+    from dash_capture.capture import WizardConfig
 
 
 def _make_snapshot_fn(img_b64: str) -> Callable[[], bytes]:
@@ -380,9 +385,8 @@ def _register_custom_action(
 
 def wire_wizard(
     *,
-    element_id: str,
+    cfg: WizardConfig,
     strategy: CaptureStrategy,
-    renderer: Callable,
     config: Any,  # FnForm or dash_capture.capture._NullFnForm — duck-typed
     has_snapshot: bool,
     has_fig_data: bool,
@@ -390,17 +394,29 @@ def wire_wizard(
     params: Mapping,
     ids: dict[str, str],
     trigger: str | Any,
-    filename: str,
-    autogenerate: bool,
     styles: dict,
     class_names: dict,
-    field_specs: dict[str, Any] | None = None,
-    capture_resolver: Callable | None = None,
-    show_format: bool = True,
-    wizard_header: str | Any = "Capture",
-    actions: list | None = None,
+    field_specs: dict[str, Any] | None,
+    show_format: bool,
 ) -> html.Div:
-    """Build the wizard layout and register all callbacks."""
+    """Build the wizard layout and register all callbacks.
+
+    Takes the user-supplied config (``cfg``) plus the runtime state
+    that ``_make_wizard`` already computed (resolved strategy after
+    preprocess merge, the FnForm/_NullFnForm config, the renderer
+    metadata booleans, the merged field_specs, the resolved
+    show_format bool, etc.). The split keeps the dataclass focused
+    on user inputs and the kwargs focused on derived state.
+    """
+    # Pull renderer-side data from cfg, runtime data from kwargs.
+    element_id = cfg.element_id
+    renderer = cfg.renderer
+    filename = cfg.filename
+    autogenerate = cfg.autogenerate
+    capture_resolver = cfg.capture_resolver
+    wizard_header = cfg.wizard_header
+    actions = cfg.actions or []
+
     config_id = ids["cfg"]
     wizard_id = ids["wiz"]
     preview_id = ids["preview"]
@@ -416,7 +432,6 @@ def wire_wizard(
     format_id = ids["format"]
     resolved_store_id = ids.get("resolved")
 
-    actions = actions or []
     action_ids = [
         (f"_dcap_action_{i}_{wizard_id}", action.label)
         for i, action in enumerate(actions)

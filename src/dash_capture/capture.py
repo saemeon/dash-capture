@@ -307,6 +307,41 @@ class WizardAction:
     icon: str | None = None
 
 
+@dataclass
+class WizardConfig:
+    """Bundle of arguments threaded through ``_make_wizard`` /
+    ``wire_wizard``.
+
+    Constructed by :func:`capture_graph` / :func:`capture_element` after
+    they resolve their public defaults. Replaces the previous 16-argument
+    positional / keyword threading that duplicated the arg list across
+    three call sites — adding a new option now requires touching only
+    this dataclass plus the public function signatures, instead of
+    threading it through internal helpers.
+
+    Internal API: not exported, not meant for users to construct
+    directly. Used as the single argument carried through the wizard
+    pipeline.
+    """
+
+    element_id: str
+    renderer: Callable
+    strategy: CaptureStrategy
+    trigger: str | Any
+    filename: str
+    preprocess: str | None = None
+    autogenerate: bool = True
+    persist: bool = True
+    styles: dict | None = None
+    class_names: dict | None = None
+    field_specs: dict[str, Field | FieldHook] | None = None
+    field_components: Any = "dcc"
+    capture_resolver: Callable | None = None
+    show_format: bool | None = None
+    wizard_header: str | Any = "Capture"
+    actions: list[WizardAction] | None = None
+
+
 def capture_binding(
     element: str | Any,
     strategy: CaptureStrategy | None = None,
@@ -349,32 +384,32 @@ def capture_binding(
     return CaptureBinding(store=store, store_id=store_id, element_id=el_id)
 
 
-def _make_wizard(
-    element_id: str,
-    renderer: Callable,
-    strategy: CaptureStrategy,
-    preprocess: str | None,
-    trigger: str | Any,
-    filename: str,
-    autogenerate: bool,
-    persist: bool,
-    styles: dict | None,
-    class_names: dict | None,
-    field_specs: dict[str, Field | FieldHook] | None,
-    field_components: Any,
-    capture_resolver: Callable | None = None,
-    show_format: bool | None = None,
-    wizard_header: str | Any = "Capture",
-    actions: list[WizardAction] | None = None,
-) -> html.Div:
-    """Shared implementation for ``capture_graph`` and ``capture_element``."""
-    if preprocess is not None:
-        strategy = CaptureStrategy(preprocess=preprocess, capture=strategy.capture)
+def _make_wizard(cfg: WizardConfig) -> html.Div:
+    """Shared implementation for ``capture_graph`` and ``capture_element``.
+
+    Takes a fully-resolved :class:`WizardConfig` and produces the
+    rendered ``html.Div`` wizard. Steps:
+
+    1. Apply ``preprocess`` to the strategy (if any).
+    2. Look up renderer metadata via :func:`_renderer_meta` (cached if
+       the renderer was ``@renderer``-decorated).
+    3. Resolve ``show_format`` (auto → True/False based on has_snapshot).
+    4. Merge ``field_specs`` with persistence defaults if requested.
+    5. Mint per-wizard component IDs.
+    6. Build the form config — :class:`_NullFnForm` short-circuit when
+       there are no fields, otherwise a real :class:`FnForm`.
+    7. If ``trigger == "modebar"``, build the modebar bridge.
+    8. Hand off to :func:`wire_wizard` for layout + callback registration.
+    9. Inject vendored ``html2canvas.min.js`` if the strategy uses it.
+    """
+    strategy = cfg.strategy
+    if cfg.preprocess is not None:
+        strategy = CaptureStrategy(preprocess=cfg.preprocess, capture=strategy.capture)
 
     # Read pre-classified renderer metadata. If the renderer was decorated
     # with ``@renderer`` we use the cached meta from ``__dcap_meta__``;
     # otherwise we compute it lazily here.
-    meta = _renderer_meta(renderer)
+    meta = _renderer_meta(cfg.renderer)
     has_snapshot = meta.has_snapshot
     has_fig_data = meta.has_fig_data
     active_capture = list(meta.active_capture)
@@ -382,13 +417,14 @@ def _make_wizard(
 
     # ``params`` is still needed by ``wire_wizard`` (it's threaded into
     # ``build_capture_js`` for ``capture_*`` parameter routing).
-    params = inspect.signature(renderer).parameters
+    params = inspect.signature(cfg.renderer).parameters
 
     # Auto-disable the format dropdown for fig-data-only renderers — the
     # selector is meaningless when no image is produced.
-    show_format = _resolve_show_format(show_format, has_snapshot)
+    show_format = _resolve_show_format(cfg.show_format, has_snapshot)
 
-    if persist:
+    field_specs = cfg.field_specs
+    if cfg.persist:
         merged_specs: dict[str, Field | FieldHook] = {
             name: Field(persist=True) for name in meta.fields
         }
@@ -396,10 +432,10 @@ def _make_wizard(
             merged_specs.update(field_specs)
         field_specs = merged_specs
 
-    _styles = styles or {}
-    _class_names = class_names or {}
+    styles = cfg.styles or {}
+    class_names = cfg.class_names or {}
 
-    uid = _new_id(element_id)
+    uid = _new_id(cfg.element_id)
     id_keys = [
         "cfg",
         "wiz",
@@ -415,7 +451,7 @@ def _make_wizard(
         "snapshot",
         "format",
     ]
-    if capture_resolver is not None:
+    if cfg.capture_resolver is not None:
         id_keys.append("resolved")
     ids = {k: f"_dcap_{k}_{uid}" for k in id_keys}
 
@@ -431,16 +467,18 @@ def _make_wizard(
     else:
         config = FnForm(
             ids["cfg"],
-            renderer,
-            _styles=_styles,
-            _class_names=_class_names,
+            cfg.renderer,
+            _styles=styles,
+            _class_names=class_names,
             _field_specs=field_specs,
             _show_docstring=False,
             _exclude=exclude,
-            _field_components=field_components,
+            _field_components=cfg.field_components,
         )
 
-    # Modebar trigger
+    # Modebar trigger — wire up a bridge button if the user opted into the
+    # Plotly modebar entry-point. Otherwise the trigger flows through as-is.
+    trigger = cfg.trigger
     modebar_bridge = None
     if trigger == "modebar" or isinstance(trigger, ModebarButton | ModebarIcon):
         if isinstance(trigger, ModebarButton):
@@ -450,13 +488,12 @@ def _make_wizard(
         else:
             mb = ModebarButton()
         bridge_id = f"_dcap_modebar_{uid}"
-        modebar_bridge = add_modebar_button(element_id, bridge_id, button=mb)
+        modebar_bridge = add_modebar_button(cfg.element_id, bridge_id, button=mb)
         trigger = modebar_bridge
 
     wizard_div = wire_wizard(
-        element_id=element_id,
+        cfg=cfg,
         strategy=strategy,
-        renderer=renderer,
         config=config,
         has_snapshot=has_snapshot,
         has_fig_data=has_fig_data,
@@ -464,19 +501,26 @@ def _make_wizard(
         params=params,
         ids=ids,
         trigger=trigger,
-        filename=filename,
-        autogenerate=autogenerate,
-        styles=_styles,
-        class_names=_class_names,
+        styles=styles,
+        class_names=class_names,
         field_specs=field_specs,
-        capture_resolver=capture_resolver,
         show_format=show_format,
-        wizard_header=wizard_header,
-        actions=actions or [],
     )
 
     if modebar_bridge is not None:
-        return html.Div([modebar_bridge, wizard_div])
+        wizard_div = html.Div([modebar_bridge, wizard_div])
+
+    # Inject vendored html2canvas.min.js into the app's index_string when
+    # the strategy needs it. Driven by the strategy itself (not by which
+    # public function was called), so capture_graph users who pass
+    # ``strategy=html2canvas_strategy()`` get the script too. Previously
+    # this lived in ``capture_element`` only — capture_graph + html2canvas
+    # silently failed because the JS was never injected.
+    if getattr(strategy, "capture", "") == _HTML2CANVAS_CAPTURE:
+        from dash_capture._html2canvas import ensure_html2canvas
+
+        return html.Div(ensure_html2canvas([wizard_div]))
+
     return wizard_div
 
 
@@ -511,12 +555,20 @@ def capture_graph(
         Function with ``(_target, _snapshot_img, **fields)`` signature.
         Defaults to a passthrough that writes the captured bytes
         unchanged — the wizard then shows just *Generate* + *Download*
-        with no extra fields.
+        with no extra fields and no third-party dependencies.
+
+        Strongly recommended: decorate custom renderers with
+        :func:`renderer` so the magic parameter names
+        (``_target`` / ``_snapshot_img`` / ``_fig_data``) are
+        validated at definition time. Built-in PIL renderers
+        (``bordered`` / ``titled`` / ``watermarked``) are available
+        in :mod:`dash_capture.pil` (requires the ``[pil]`` extra).
     trigger : str, Dash component, or ModebarButton
         String label, custom component, ``"modebar"``, or :class:`ModebarButton`.
     strategy : CaptureStrategy, optional
-        Capture strategy. Defaults to ``plotly_strategy()``. Use
-        ``plotly_strategy(strip_title=True, ...)`` to strip elements.
+        Capture strategy. Defaults to :func:`~dash_capture.plotly_strategy`.
+        Pass ``plotly_strategy(strip_title=True, strip_legend=True, ...)``
+        to strip Plotly decorations before capture.
     preprocess : str, optional
         Custom JS preprocess code (browser-side, security-sensitive).
     filename : str
@@ -548,13 +600,34 @@ def capture_graph(
 
     Examples
     --------
-    >>> from dash_capture import capture_graph, plotly_strategy
-    >>> wizard = capture_graph("my-graph", trigger="Export")
-    >>> # With strip patches:
-    >>> wizard = capture_graph(
-    ...     "my-graph",
-    ...     strategy=plotly_strategy(strip_title=True, strip_legend=True),
-    ... )
+    Default — passthrough, no fields, just Generate + Download::
+
+        >>> from dash_capture import capture_graph
+        >>> wizard = capture_graph("my-graph", trigger="Export")
+
+    With strip patches via the strategy::
+
+        >>> from dash_capture import capture_graph, plotly_strategy
+        >>> wizard = capture_graph(
+        ...     "my-graph",
+        ...     strategy=plotly_strategy(strip_title=True, strip_legend=True),
+        ... )
+
+    With a built-in PIL renderer::
+
+        >>> from dash_capture import capture_graph
+        >>> from dash_capture.pil import titled
+        >>> wizard = capture_graph("my-graph", renderer=titled)
+
+    With a custom renderer (decorated for typo validation)::
+
+        >>> from dash_capture import capture_graph, renderer
+        >>>
+        >>> @renderer
+        ... def my_renderer(_target, _snapshot_img, dpi: int = 150):
+        ...     _target.write(_snapshot_img())
+        >>>
+        >>> wizard = capture_graph("my-graph", renderer=my_renderer)
     """
     if renderer is None:
         renderer = _default_renderer
@@ -562,26 +635,27 @@ def capture_graph(
     graph_id = graph if isinstance(graph, str) else cast(Any, graph).id
 
     if strategy is None:
-        params = inspect.signature(renderer).parameters
-        strategy = plotly_strategy(_params=params)
+        strategy = plotly_strategy(_params=inspect.signature(renderer).parameters)
 
     return _make_wizard(
-        graph_id,
-        renderer,
-        strategy,
-        preprocess,
-        trigger,
-        filename,
-        autogenerate,
-        persist,
-        styles,
-        class_names,
-        field_specs,
-        field_components,
-        capture_resolver=capture_resolver,
-        show_format=show_format,
-        wizard_header=wizard_header,
-        actions=actions,
+        WizardConfig(
+            element_id=graph_id,
+            renderer=renderer,
+            strategy=strategy,
+            trigger=trigger,
+            filename=filename,
+            preprocess=preprocess,
+            autogenerate=autogenerate,
+            persist=persist,
+            styles=styles,
+            class_names=class_names,
+            field_specs=field_specs,
+            field_components=field_components,
+            capture_resolver=capture_resolver,
+            show_format=show_format,
+            wizard_header=wizard_header,
+            actions=actions,
+        )
     )
 
 
@@ -605,17 +679,27 @@ def capture_element(
 ) -> html.Div:
     """Capture wizard for any Dash component (html2canvas by default).
 
+    Captures arbitrary DOM elements via the bundled
+    ``html2canvas.min.js``, which is auto-injected into the app's
+    ``index_string``. Works with ``dash_table.DataTable``, ``html.Div``,
+    custom widgets, etc. — anything with an ``id``.
+
     Parameters
     ----------
     component : str or Dash component
         Any Dash component with an ``id``, or a string ID.
     renderer : callable, optional
-        See :func:`capture_graph` for the protocol.  Defaults to a
-        passthrough that writes the captured bytes unchanged.
+        See :func:`capture_graph` for the protocol. Defaults to a
+        passthrough that writes the captured bytes unchanged. Built-in
+        PIL renderers (``bordered`` / ``titled`` / ``watermarked``)
+        from :mod:`dash_capture.pil` work for both graphs and elements.
     trigger : str or Dash component
         String label or custom component with ``n_clicks``.
     strategy : CaptureStrategy, optional
-        Defaults to ``html2canvas_strategy()``.
+        Defaults to :func:`~dash_capture.html2canvas_strategy`. Pass
+        :func:`~dash_capture.canvas_strategy` for raw ``<canvas>``
+        elements, or :func:`~dash_capture.plotly_strategy` to capture
+        a Plotly graph through this entry point.
     preprocess : str, optional
         Custom JS preprocess code.
     filename : str
@@ -643,8 +727,16 @@ def capture_element(
 
     Examples
     --------
-    >>> from dash_capture import capture_element
-    >>> wizard = capture_element("my-div", trigger="Screenshot")
+    Default — capture a DataTable to PNG::
+
+        >>> from dash_capture import capture_element
+        >>> wizard = capture_element("my-data-table", trigger="Screenshot")
+
+    With a built-in PIL renderer::
+
+        >>> from dash_capture import capture_element
+        >>> from dash_capture.pil import titled
+        >>> wizard = capture_element("my-data-table", renderer=titled)
     """
     if renderer is None:
         renderer = _default_renderer
@@ -654,28 +746,23 @@ def capture_element(
     if strategy is None:
         strategy = html2canvas_strategy()
 
-    wizard = _make_wizard(
-        comp_id,
-        renderer,
-        strategy,
-        preprocess,
-        trigger,
-        filename,
-        autogenerate,
-        persist,
-        styles,
-        class_names,
-        field_specs,
-        field_components,
-        capture_resolver=capture_resolver,
-        show_format=show_format,
-        wizard_header=wizard_header,
-        actions=actions,
+    return _make_wizard(
+        WizardConfig(
+            element_id=comp_id,
+            renderer=renderer,
+            strategy=strategy,
+            trigger=trigger,
+            filename=filename,
+            preprocess=preprocess,
+            autogenerate=autogenerate,
+            persist=persist,
+            styles=styles,
+            class_names=class_names,
+            field_specs=field_specs,
+            field_components=field_components,
+            capture_resolver=capture_resolver,
+            show_format=show_format,
+            wizard_header=wizard_header,
+            actions=actions,
+        )
     )
-
-    if getattr(strategy, "capture", "") == _HTML2CANVAS_CAPTURE:
-        from dash_capture._html2canvas import ensure_html2canvas
-
-        return html.Div(ensure_html2canvas([wizard]))
-
-    return wizard

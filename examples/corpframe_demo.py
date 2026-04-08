@@ -2,6 +2,18 @@
 
 One-click corporate chart export: capture → strip Plotly decorations →
 add corporate header (title, subtitle) and footer (footnotes, sources).
+
+.. warning::
+    This example imports ``corpframe.dash.corporate_capture_graph``
+    which is **not currently available** as a Python package in this
+    workspace. The file is preserved as a reference for the intended
+    corpframe Python API. The ``strip_*`` keyword arguments below are
+    part of ``corporate_capture_graph``'s surface (a higher-level
+    wrapper around ``dash_capture.capture_graph``), not the
+    dash-capture base API — those were collapsed into
+    ``plotly_strategy()`` in dash-capture itself. See
+    ``examples/capture_demo.py`` for the current dash-capture usage
+    pattern.
 """
 
 import dash

@@ -14,9 +14,11 @@ from dash_capture._wizard_callbacks import _make_snapshot_fn, _to_src
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
+    WizardConfig,
     _classify_params,
     _default_renderer,
     _get_nested,
+    _make_wizard,
     _NullFnForm,
     _renderer_meta,
     _RendererMeta,
@@ -26,6 +28,7 @@ from dash_capture.capture import (
     capture_graph,
     renderer,
 )
+from dash_capture.strategies import html2canvas_strategy, plotly_strategy
 
 # ---------------------------------------------------------------------------
 # FromPlotly hook
@@ -671,3 +674,177 @@ class TestNoFieldsShortCircuit:
         style = _find_format_dropdown_style(wizard)
         assert style is not None
         assert style.get("display") != "none"
+
+
+# ---------------------------------------------------------------------------
+# html2canvas script injection — driven by strategy, not public function
+# ---------------------------------------------------------------------------
+
+
+class TestHtml2canvasScriptInjection:
+    """The vendored html2canvas.min.js injection used to live only in
+    ``capture_element``. After the unification it moved into
+    ``_make_wizard`` so that ``capture_graph`` users who explicitly pass
+    ``strategy=html2canvas_strategy()`` also get the script. This was a
+    latent bug — capture_graph + html2canvas silently failed before.
+    """
+
+    def _injected_marker_in_app(self) -> bool:
+        import dash
+
+        from dash_capture._html2canvas import _MARKER
+
+        try:
+            app = dash.get_app()
+        except Exception:
+            return False
+        return _MARKER in app.index_string
+
+    def test_capture_element_default_injects_script(self):
+        # Fresh app per test — get_app() gives the most recent
+        import dash
+
+        dash.Dash(__name__)
+        capture_element("el-h2c-default")
+        assert self._injected_marker_in_app(), (
+            "capture_element with default html2canvas strategy must inject "
+            "the vendored script into app.index_string"
+        )
+
+    def test_capture_graph_with_explicit_html2canvas_injects_script(self):
+        # The latent bug fix: capture_graph + html2canvas_strategy() must
+        # also trigger script injection. Before this change it didn't.
+        import dash
+
+        from dash_capture import html2canvas_strategy
+
+        dash.Dash(__name__)
+        capture_graph("g-h2c-explicit", strategy=html2canvas_strategy())
+        assert self._injected_marker_in_app(), (
+            "capture_graph with strategy=html2canvas_strategy() must also "
+            "inject the vendored script — this was a latent bug fixed by "
+            "moving the injection into _make_wizard."
+        )
+
+    def test_capture_graph_with_plotly_does_not_inject_script(self):
+        # Conversely, plain capture_graph (Plotly strategy) must NOT
+        # inject html2canvas — wasted bytes for users who don't need it.
+        import dash
+
+        from dash_capture._html2canvas import _MARKER
+
+        # Fresh app — must start without the marker
+        app = dash.Dash(__name__)
+        assert _MARKER not in app.index_string
+
+        capture_graph("g-h2c-not-needed")
+
+        # Still no marker — capture_graph with default plotly strategy
+        # should not have injected html2canvas
+        assert _MARKER not in app.index_string, (
+            "capture_graph with default plotly_strategy must not inject "
+            "html2canvas (wasted bytes)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# WizardConfig dataclass
+# ---------------------------------------------------------------------------
+
+
+class TestWizardConfig:
+    """``WizardConfig`` is the dataclass threaded through ``_make_wizard``
+    and ``wire_wizard``. Tests verify field defaults, that all required
+    fields are present, and that ``_make_wizard(cfg)`` produces a valid
+    wizard from a minimal config.
+    """
+
+    def test_minimum_required_fields(self):
+        # Must accept just the five required fields, defaults for the rest
+        cfg = WizardConfig(
+            element_id="test",
+            renderer=_default_renderer,
+            strategy=plotly_strategy(),
+            trigger="Capture",
+            filename="x.png",
+        )
+        assert cfg.element_id == "test"
+        assert cfg.renderer is _default_renderer
+        assert cfg.preprocess is None
+        assert cfg.autogenerate is True  # default
+        assert cfg.persist is True  # default
+        assert cfg.styles is None
+        assert cfg.field_components == "dcc"
+        assert cfg.show_format is None  # default = auto
+        assert cfg.actions is None
+
+    def test_full_construction(self):
+        # All fields populated
+        def fn(_target, _snapshot_img, title: str = ""):
+            _target.write(_snapshot_img())
+
+        cfg = WizardConfig(
+            element_id="my-graph",
+            renderer=fn,
+            strategy=plotly_strategy(strip_title=True),
+            trigger="Export",
+            filename="export.png",
+            preprocess="// custom JS",
+            autogenerate=False,
+            persist=False,
+            styles={"button": {"color": "red"}},
+            class_names={"button": "my-btn"},
+            field_specs=None,
+            field_components="dmc",
+            capture_resolver=None,
+            show_format=True,
+            wizard_header="Export Wizard",
+            actions=None,
+        )
+        assert cfg.preprocess == "// custom JS"
+        assert cfg.autogenerate is False
+        assert cfg.persist is False
+        assert cfg.styles == {"button": {"color": "red"}}
+        assert cfg.field_components == "dmc"
+        assert cfg.show_format is True
+        assert cfg.wizard_header == "Export Wizard"
+
+    def test_make_wizard_accepts_dataclass(self):
+        # _make_wizard now takes a WizardConfig — verify it produces an
+        # html.Div from a minimal config (no kwargs threading)
+        cfg = WizardConfig(
+            element_id="g-cfg-min",
+            renderer=_default_renderer,
+            strategy=plotly_strategy(),
+            trigger="Capture",
+            filename="x.png",
+        )
+        result = _make_wizard(cfg)
+        assert isinstance(result, html.Div)
+
+    def test_capture_graph_constructs_dataclass(self):
+        # The public capture_graph wrapper bundles its kwargs into
+        # WizardConfig and forwards to _make_wizard. Verify by walking
+        # back from the result that the wizard was built.
+        wizard = capture_graph("g-cfg-public")
+        assert isinstance(wizard, html.Div)
+
+    def test_capture_element_constructs_dataclass(self):
+        wizard = capture_element("el-cfg-public")
+        assert isinstance(wizard, html.Div)
+
+    def test_html2canvas_via_capture_graph_through_dataclass(self):
+        # Regression: capture_graph + html2canvas_strategy must still
+        # inject the script after the dataclass refactor
+        import dash
+
+        from dash_capture._html2canvas import _MARKER
+
+        dash.Dash(__name__)
+        capture_graph(
+            "g-cfg-h2c",
+            strategy=html2canvas_strategy(),
+        )
+        # Walk back to the current app and check the marker
+        app = dash.get_app()
+        assert _MARKER in app.index_string

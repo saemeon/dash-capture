@@ -1,7 +1,17 @@
 """dash-capture demo — run with: uv run python examples/capture_demo.py
 
-Showcases the full range of auto-generated form field types:
-  str, int, float, bool, Literal (dropdown), date, datetime, list
+Showcases:
+
+* The full range of auto-generated form field types
+  (``str``, ``int``, ``float``, ``bool``, ``Literal``, ``date``)
+* The ``@renderer`` decorator for definition-time validation of magic
+  parameter names (``_target``, ``_snapshot_img``, ``_fig_data``)
+* Strip-patch and format-selection strategies via ``plotly_strategy``
+* DOM-element capture via ``capture_element`` + html2canvas
+* Built-in PIL renderers from ``dash_capture.pil``
+  (requires the ``[pil]`` extra)
+* Server-side ``_fig_data`` access (no browser screenshot)
+* Renderer error display
 """
 
 import io
@@ -13,7 +23,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import dash_table, dcc, html
 
-from dash_capture import capture_element, capture_graph, plotly_strategy
+from dash_capture import capture_element, capture_graph, plotly_strategy, renderer
+from dash_capture.pil import bordered as pil_bordered
+from dash_capture.pil import titled as pil_titled
+from dash_capture.pil import watermarked as pil_watermarked
 
 # --- sample figure ---
 fig = go.Figure(
@@ -42,11 +55,24 @@ graph = dcc.Graph(id="demo-graph", figure=fig)
 # ---------------------------------------------------------------------------
 
 
+# Each renderer below is decorated with ``@renderer`` so the magic
+# parameter names (``_target``, ``_snapshot_img``, ``_fig_data``) are
+# validated at definition time. A typo like ``_snaphot_img`` would raise
+# ``ValueError`` here instead of silently breaking the wizard at runtime.
+
+
+@renderer
 def passthrough(_target, _snapshot_img):
-    """No user parameters → empty wizard (just Generate + Download)."""
+    """No user parameters → empty wizard (just Generate + Download).
+
+    Equivalent to omitting ``renderer=`` entirely — that's the default
+    behavior when you call ``capture_graph("my-graph")`` with no
+    renderer override.
+    """
     _target.write(_snapshot_img())
 
 
+@renderer
 def str_and_int_renderer(
     _target,
     _snapshot_img,
@@ -55,7 +81,11 @@ def str_and_int_renderer(
 ):
     """str → text input, int → number input.
 
-    Overlays a matplotlib title at the given DPI.
+    Overlays a matplotlib title at the given DPI. Demonstrates how to
+    plug matplotlib into the dash-capture pipeline when you want
+    matplotlib's annotation API specifically — for the common case of
+    "add a title above an image", prefer the lighter
+    :func:`dash_capture.pil.titled` instead.
     """
     import matplotlib.pyplot as plt
 
@@ -73,6 +103,7 @@ def str_and_int_renderer(
         plt.close(fig_mpl)
 
 
+@renderer
 def literal_and_bool_renderer(
     _target,
     _snapshot_img,
@@ -82,7 +113,9 @@ def literal_and_bool_renderer(
 ):
     """Literal → dropdown, int → number input, bool → checkbox.
 
-    Adds a colored border (and optional shadow) using PIL.
+    Adds a colored border (and optional shadow) using PIL. Inline
+    version that exists for the type-hint showcase — the equivalent
+    "just a colored border" exists as :func:`dash_capture.pil.bordered`.
     """
     from PIL import Image, ImageFilter
 
@@ -98,6 +131,7 @@ def literal_and_bool_renderer(
     _target.write(buf.getvalue())
 
 
+@renderer
 def float_renderer(
     _target,
     _snapshot_img,
@@ -118,6 +152,7 @@ def float_renderer(
     _target.write(buf.getvalue())
 
 
+@renderer
 def date_renderer(
     _target,
     _snapshot_img,
@@ -140,6 +175,7 @@ def date_renderer(
     _target.write(buf.getvalue())
 
 
+@renderer
 def figdata_renderer(
     _target,
     _fig_data,
@@ -148,7 +184,9 @@ def figdata_renderer(
     """_fig_data → receives the Plotly figure dict (no browser capture needed).
 
     Demonstrates server-side figure access without _snapshot_img.
-    Writes a text summary or JSON dump of the figure data.
+    Writes a text summary or JSON dump of the figure data. Note: the
+    format dropdown is auto-hidden for fig-data-only renderers (no
+    image is produced, so format selection is meaningless).
     """
     import json
 
@@ -165,6 +203,7 @@ def figdata_renderer(
     _target.write(text.encode())
 
 
+@renderer
 def table_titled_renderer(
     _target,
     _snapshot_img,
@@ -190,6 +229,7 @@ def table_titled_renderer(
     _target.write(buf.getvalue())
 
 
+@renderer
 def error_renderer(
     _target,
     _snapshot_img,
@@ -253,11 +293,17 @@ app.layout = html.Div(
         html.Hr(),
         graph,
         html.Br(),
-        # 1. No fields
+        # 1. No fields — the default
         html.Div(
             style=SECTION,
             children=[
                 html.H4("1. No parameters → empty wizard"),
+                html.P(
+                    "Calling capture_graph with no renderer override uses "
+                    "the built-in passthrough — equivalent to the explicit "
+                    "renderer below. The wizard collapses to just Generate "
+                    "+ Download with no form fields."
+                ),
                 html.Code("def passthrough(_target, _snapshot_img)"),
                 html.Br(),
                 html.Br(),
@@ -464,6 +510,62 @@ app.layout = html.Div(
                     "demo-graph",
                     renderer=error_renderer,
                     trigger="Capture (error demo)",
+                ),
+            ],
+        ),
+        # 14. Built-in PIL renderers
+        html.Hr(),
+        html.H3("Built-in PIL renderers — dash_capture.pil"),
+        html.P(
+            "Three batteries-included renderers that decorate captured "
+            "screenshots using Pillow. Each one is decorated with "
+            "@renderer and exposes type-hinted parameters as auto-generated "
+            "form fields. Requires the [pil] extra: pip install 'dash-capture[pil]'."
+        ),
+        html.Div(
+            style=SECTION,
+            children=[
+                html.H4("14. dash_capture.pil.titled — title bar above the chart"),
+                html.Code(
+                    "titled(_target, _snapshot_img, title, subtitle, "
+                    "bar_color, text_color)"
+                ),
+                html.Br(),
+                html.Br(),
+                capture_graph(
+                    "demo-graph",
+                    renderer=pil_titled,
+                    trigger="Capture (PIL titled)",
+                ),
+            ],
+        ),
+        html.Div(
+            style=SECTION,
+            children=[
+                html.H4("15. dash_capture.pil.bordered — colored border"),
+                html.Code("bordered(_target, _snapshot_img, color, width)"),
+                html.Br(),
+                html.Br(),
+                capture_graph(
+                    "demo-graph",
+                    renderer=pil_bordered,
+                    trigger="Capture (PIL bordered)",
+                ),
+            ],
+        ),
+        html.Div(
+            style=SECTION,
+            children=[
+                html.H4("16. dash_capture.pil.watermarked — diagonal watermark"),
+                html.Code(
+                    "watermarked(_target, _snapshot_img, text, opacity, position)"
+                ),
+                html.Br(),
+                html.Br(),
+                capture_graph(
+                    "demo-graph",
+                    renderer=pil_watermarked,
+                    trigger="Capture (PIL watermarked)",
                 ),
             ],
         ),
