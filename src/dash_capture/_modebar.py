@@ -108,9 +108,9 @@ def _build_inject_js(
         var gid = '{safe_gid}';
         var bid = '{safe_bid}';
         function inject() {{
-            var el = document.getElementById(gid);
-            if (!el) return;
-            var groups = el.querySelectorAll('.modebar-group');
+            var outer = document.getElementById(gid);
+            if (!outer) return;
+            var groups = outer.querySelectorAll('.modebar-group');
             if (!groups.length) return;
             var bar = groups[0].parentNode;
             if (bar.querySelector('[data-dcap-id="' + bid + '"]')) return;
@@ -130,10 +130,22 @@ def _build_inject_js(
             newGroup.appendChild(btn);
             bar.appendChild(newGroup);
         }}
-        var iv = setInterval(function() {{ inject();
-            var el = document.getElementById(gid);
-            if (el && el.querySelector('[data-dcap-id="' + bid + '"]')) clearInterval(iv);
-        }}, 200);
+        var tries = 0;
+        function attach() {{
+            var outer = document.getElementById(gid);
+            var gd = outer && outer.querySelector('.js-plotly-plot');
+            if (!gd || typeof gd.on !== 'function') {{
+                if (tries++ < 100) setTimeout(attach, 100);
+                return;
+            }}
+            if (!gd._dcapAttached) gd._dcapAttached = {{}};
+            if (gd._dcapAttached[bid] !== gd.on) {{
+                gd._dcapAttached[bid] = gd.on;
+                gd.on('plotly_afterplot', inject);
+            }}
+            inject();
+        }}
+        attach();
         return window.dash_clientside.no_update;
     }}
     """
