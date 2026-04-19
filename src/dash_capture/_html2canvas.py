@@ -1,8 +1,11 @@
 """Auto-include vendored html2canvas.min.js.
 
-When ``capture_element`` uses html2canvas_strategy, the JS library is
-injected into the Dash app's ``index_string`` so the browser executes it
-as part of the initial HTML response.  No CDN needed.
+When ``capture_element`` uses ``html2canvas_strategy``, the JS library is
+registered via Dash's :data:`GLOBAL_INLINE_SCRIPTS` queue so Dash emits
+it as an inline ``<script>`` tag on page serve. This is the same
+mechanism ``@dash.callback`` / ``clientside_callback`` use to queue work
+before any ``Dash`` instance exists — it lets callers build layout
+fragments in independent modules and assemble the app later.
 """
 
 from __future__ import annotations
@@ -10,9 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import dash
+from dash._callback import GLOBAL_INLINE_SCRIPTS
 
 _ASSETS_DIR = Path(__file__).parent / "assets"
-_MARKER = "<!--dcap-html2canvas-->"
+_MARKER = "// __dcap_html2canvas__"
 
 
 def _read_html2canvas() -> str:
@@ -26,28 +30,26 @@ def _read_html2canvas() -> str:
 
 
 def ensure_html2canvas(children: list) -> list:
-    """Ensure html2canvas is loaded into the current Dash app's HTML head.
+    """Register html2canvas with Dash's inline-script queue if not already.
 
-    Patches ``app.index_string`` once per app so the script is part of
-    the initial HTML response (React does not execute ``<script>`` tags
-    rendered inside the component tree).  ``children`` is returned
-    unchanged — kept for API symmetry with the previous behavior.
+    Idempotent within a Python process: the script is queued at most
+    once. Safe to call before any :class:`dash.Dash` instance exists —
+    Dash drains :data:`GLOBAL_INLINE_SCRIPTS` on the first page serve.
+
+    ``children`` is returned unchanged; the list parameter is retained
+    for API symmetry with the previous implementation.
     """
+    # Already queued, not yet drained by any app?
+    if any(_MARKER in s for s in GLOBAL_INLINE_SCRIPTS):
+        return children
+    # Already drained into a live app?
     try:
         app = dash.get_app()
     except Exception:
+        app = None
+    if app is not None and any(
+        _MARKER in s for s in getattr(app, "_inline_scripts", [])
+    ):
         return children
-
-    if getattr(app, "_dcap_html2canvas_injected", False):
-        return children
-
-    js = _read_html2canvas()
-    snippet = f"{_MARKER}<script>{js}</script>"
-    if "{%scripts%}" in app.index_string:
-        app.index_string = app.index_string.replace(
-            "{%scripts%}", snippet + "{%scripts%}"
-        )
-    elif "</head>" in app.index_string:
-        app.index_string = app.index_string.replace("</head>", snippet + "</head>")
-    app._dcap_html2canvas_injected = True
+    GLOBAL_INLINE_SCRIPTS.append(f"{_MARKER}\n{_read_html2canvas()}")
     return children
