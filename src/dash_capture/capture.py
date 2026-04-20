@@ -609,6 +609,25 @@ def capture_graph(
     -------
     html.Div
 
+    Notes
+    -----
+    **Composition with ``dcc.Loading``.** The returned wizard has
+    internal callbacks targeting the preview ``<img>``, snapshot
+    ``dcc.Store``, and error div. If you place the wizard (or a
+    component that bundles it with the captured graph) inside a
+    ``dcc.Loading`` wrapper, those internal callbacks will also trigger
+    the loading spinner on every capture click. To scope the spinner to
+    only the graph's own updates, use Dash's ``target_components=``
+    parameter (Dash 2.14+)::
+
+        dcc.Loading(
+            graph,
+            target_components={"my-graph": "figure"},
+        )
+
+    This limits the spinner to updates of ``graph.figure`` specifically,
+    ignoring the wizard's internal callbacks.
+
     Examples
     --------
     Default — passthrough, no fields, just Generate + Download::
@@ -737,6 +756,12 @@ def capture_element(
     Returns
     -------
     html.Div
+
+    Notes
+    -----
+    See :func:`capture_graph` for composition notes — in particular
+    the interaction with ``dcc.Loading`` and the
+    ``target_components=`` escape hatch.
 
     Examples
     --------
