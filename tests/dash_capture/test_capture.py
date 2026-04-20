@@ -10,7 +10,11 @@ import pytest
 from dash import dcc, html
 from dash_fn_form import FieldHook, FromComponent
 
-from dash_capture._wizard_callbacks import _make_snapshot_fn, _to_src
+from dash_capture._wizard_callbacks import (
+    _make_snapshot_fn,
+    _resolve_download_name,
+    _to_src,
+)
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
@@ -524,6 +528,63 @@ class TestRendererMeta:
         assert meta.has_snapshot is True
         assert meta.fields == ()
 
+    def test_undecorated_typo_raises(self):
+        # The whole point of "always-on" validation: a typo in an
+        # undecorated renderer must raise at _renderer_meta time, not
+        # silently produce a wizard with a broken form field.
+        def fn(_target, _snaphot_img):  # typo
+            pass
+
+        with pytest.raises(ValueError) as exc_info:
+            _renderer_meta(fn)
+        assert "_snaphot_img" in str(exc_info.value)
+        assert "_snapshot_img" in str(exc_info.value)  # difflib suggestion
+
+    def test_undecorated_missing_target_raises(self):
+        def fn(_snapshot_img):  # no _target
+            pass
+
+        with pytest.raises(ValueError, match="_target"):
+            _renderer_meta(fn)
+
+    def test_undecorated_validation_result_is_cached(self):
+        # After the first _renderer_meta call, the validation+classification
+        # result is attached to the callable so subsequent calls are free.
+        def fn(_target, _snapshot_img, title: str = ""):
+            pass
+
+        assert not hasattr(fn, "__dcap_meta__")
+        meta = _renderer_meta(fn)
+        assert getattr(fn, "__dcap_meta__", None) is meta
+        # Second call returns the cached object, no re-validation
+        assert _renderer_meta(fn) is meta
+
+    def test_capture_graph_propagates_validation_error(self):
+        # End-to-end: passing an undecorated typo'd renderer to
+        # capture_graph raises before the wizard is constructed.
+        from dash_capture import capture_graph
+
+        def bad(_target, _snaphot_img):
+            pass
+
+        with pytest.raises(ValueError, match="_snaphot_img"):
+            capture_graph("g", renderer=bad)
+
+    def test_setattr_failure_does_not_crash(self):
+        # Some callables reject attribute assignment (e.g. bound methods on
+        # slotted classes). Validation still runs; caching just doesn't.
+        class R:
+            __slots__ = ()
+
+            def __call__(self, _target, _snapshot_img):
+                pass
+
+        r = R()
+        # Validation + classification should still succeed; the setattr
+        # inside _renderer_meta must swallow the failure silently.
+        meta = _renderer_meta(r)
+        assert meta.has_snapshot is True
+
 
 # ---------------------------------------------------------------------------
 # No-fields short-circuit (_NullFnForm)
@@ -690,15 +751,24 @@ class TestHtml2canvasScriptInjection:
     """
 
     def _injected_marker_in_app(self) -> bool:
+        """Check whether html2canvas has been registered for this app.
+
+        The new implementation queues via ``GLOBAL_INLINE_SCRIPTS``
+        (pre-drain) and ``app._inline_scripts`` (post-drain). Either
+        indicates the script will be emitted on next page serve.
+        """
         import dash
+        from dash._callback import GLOBAL_INLINE_SCRIPTS
 
         from dash_capture._html2canvas import _MARKER
 
+        if any(_MARKER in s for s in GLOBAL_INLINE_SCRIPTS):
+            return True
         try:
             app = dash.get_app()
         except Exception:
             return False
-        return _MARKER in app.index_string
+        return any(_MARKER in s for s in getattr(app, "_inline_scripts", []))
 
     def test_capture_element_default_injects_script(self):
         # Fresh app per test — get_app() gives the most recent
@@ -707,8 +777,8 @@ class TestHtml2canvasScriptInjection:
         dash.Dash(__name__)
         capture_element("el-h2c-default")
         assert self._injected_marker_in_app(), (
-            "capture_element with default html2canvas strategy must inject "
-            "the vendored script into app.index_string"
+            "capture_element with default html2canvas strategy must queue "
+            "the vendored script for emission on page serve"
         )
 
     def test_capture_graph_with_explicit_html2canvas_injects_script(self):
@@ -722,27 +792,29 @@ class TestHtml2canvasScriptInjection:
         capture_graph("g-h2c-explicit", strategy=html2canvas_strategy())
         assert self._injected_marker_in_app(), (
             "capture_graph with strategy=html2canvas_strategy() must also "
-            "inject the vendored script — this was a latent bug fixed by "
+            "queue the vendored script — this was a latent bug fixed by "
             "moving the injection into _make_wizard."
         )
 
     def test_capture_graph_with_plotly_does_not_inject_script(self):
         # Conversely, plain capture_graph (Plotly strategy) must NOT
-        # inject html2canvas — wasted bytes for users who don't need it.
+        # queue html2canvas — wasted bytes for users who don't need it.
         import dash
+        from dash._callback import GLOBAL_INLINE_SCRIPTS
 
         from dash_capture._html2canvas import _MARKER
 
-        # Fresh app — must start without the marker
+        # Fresh app + baseline queue size for this test
         app = dash.Dash(__name__)
-        assert _MARKER not in app.index_string
+        before = sum(1 for s in GLOBAL_INLINE_SCRIPTS if _MARKER in s)
+        before += sum(1 for s in getattr(app, "_inline_scripts", []) if _MARKER in s)
 
         capture_graph("g-h2c-not-needed")
 
-        # Still no marker — capture_graph with default plotly strategy
-        # should not have injected html2canvas
-        assert _MARKER not in app.index_string, (
-            "capture_graph with default plotly_strategy must not inject "
+        after = sum(1 for s in GLOBAL_INLINE_SCRIPTS if _MARKER in s)
+        after += sum(1 for s in getattr(app, "_inline_scripts", []) if _MARKER in s)
+        assert after == before, (
+            "capture_graph with default plotly_strategy must not queue "
             "html2canvas (wasted bytes)"
         )
 
@@ -835,8 +907,9 @@ class TestWizardConfig:
 
     def test_html2canvas_via_capture_graph_through_dataclass(self):
         # Regression: capture_graph + html2canvas_strategy must still
-        # inject the script after the dataclass refactor
+        # queue the script after the dataclass refactor
         import dash
+        from dash._callback import GLOBAL_INLINE_SCRIPTS
 
         from dash_capture._html2canvas import _MARKER
 
@@ -845,6 +918,198 @@ class TestWizardConfig:
             "g-cfg-h2c",
             strategy=html2canvas_strategy(),
         )
-        # Walk back to the current app and check the marker
         app = dash.get_app()
-        assert _MARKER in app.index_string
+        queued = any(_MARKER in s for s in GLOBAL_INLINE_SCRIPTS)
+        drained = any(_MARKER in s for s in getattr(app, "_inline_scripts", []))
+        assert queued or drained
+
+
+# ---------------------------------------------------------------------------
+# Download filename resolution (static and callable)
+# ---------------------------------------------------------------------------
+
+
+class TestResolveDownloadName:
+    """Pure-function tests for ``_resolve_download_name`` — static vs
+    callable filenames, format-extension patching, and fallback-on-error.
+    """
+
+    def test_static_filename_passes_through(self):
+        assert _resolve_download_name("fig.png", "png", {}) == "fig.png"
+
+    def test_static_filename_format_patched_for_jpeg(self):
+        # "figure.png" + fmt="jpeg" → "figure.jpg" (we rename the ext)
+        assert _resolve_download_name("figure.png", "jpeg", {}) == "figure.jpg"
+
+    def test_static_filename_format_patched_for_webp(self):
+        assert _resolve_download_name("figure.png", "webp", {}) == "figure.webp"
+
+    def test_static_filename_png_no_patch(self):
+        assert _resolve_download_name("figure.png", "png", {}) == "figure.png"
+
+    def test_static_filename_no_extension_gets_one(self):
+        # Original has no "." → whole name becomes the stem
+        assert _resolve_download_name("figure", "jpeg", {}) == "figure.jpg"
+
+    def test_callable_receives_field_kwargs(self):
+        seen = {}
+
+        def fn(**kwargs):
+            seen.update(kwargs)
+            return "out.png"
+
+        _resolve_download_name(fn, "png", {"title": "Q1", "dpi": 150})
+        assert seen == {"title": "Q1", "dpi": 150}
+
+    def test_callable_result_used_verbatim_for_png(self):
+        assert (
+            _resolve_download_name(
+                lambda title="chart": f"{title}.png", "png", {"title": "rev"}
+            )
+            == "rev.png"
+        )
+
+    def test_callable_result_format_patched(self):
+        # Callable returns PNG name; fmt=jpeg rewrites to .jpg
+        dl = _resolve_download_name(
+            lambda title="chart": f"{title}.png", "jpeg", {"title": "rev"}
+        )
+        assert dl == "rev.jpg"
+
+    def test_callable_exception_falls_back_to_default(self):
+        def bad(**kwargs):
+            raise RuntimeError("boom")
+
+        dl = _resolve_download_name(bad, "png", {})
+        assert dl == "capture.png"
+
+    def test_callable_exception_fallback_still_format_patched(self):
+        # Even when the callable fails and falls back, the format
+        # extension is applied to the fallback name.
+        def bad(**kwargs):
+            raise RuntimeError("boom")
+
+        dl = _resolve_download_name(bad, "jpeg", {})
+        assert dl == "capture.jpg"
+
+    def test_callable_kwargs_mismatch_falls_back(self):
+        # Callable declares `title` but we pass `name` — the TypeError
+        # is caught and falls back.
+        def fn(title: str = "chart") -> str:
+            return f"{title}.png"
+
+        dl = _resolve_download_name(fn, "png", {"name": "wrong"})
+        assert dl == "capture.png"
+
+
+class TestDownloadCallbackWiring:
+    """The download callback's Input/State shape depends on whether
+    ``filename`` is a callable (needs form-field values) or a static
+    string (doesn't).
+    """
+
+    def _find_download_state(self, uid_hint: str) -> list:
+        """Locate the download callback's `state` list via GLOBAL_CALLBACK_MAP.
+
+        dash-capture component IDs embed a random uid suffix; we scan
+        for the one matching our hint.
+        """
+        from dash._callback import GLOBAL_CALLBACK_MAP
+
+        for key, spec in GLOBAL_CALLBACK_MAP.items():
+            if "_dcap_download_" in key and uid_hint in key and key.endswith(".data"):
+                return spec.get("state", [])
+        raise AssertionError(f"no download callback found for uid hint {uid_hint!r}")
+
+    def test_static_filename_excludes_field_states(self):
+        # Static string → callback depends only on preview_src and format
+        @renderer
+        def r(_target, _snapshot_img, title: str = "chart"):
+            _target.write(_snapshot_img())
+
+        capture_graph("g-static-fn", renderer=r, filename="fixed.png")
+        state = self._find_download_state("g-static-fn")
+        # state = [preview.src, format.value] — no field.value entries
+        assert len(state) == 2
+        assert all("_field_" not in s.get("id", "") for s in state)
+
+    def test_callable_filename_includes_field_states(self):
+        # Callable → callback must have access to the field values
+        @renderer
+        def r(_target, _snapshot_img, title: str = "chart"):
+            _target.write(_snapshot_img())
+
+        capture_graph(
+            "g-dyn-fn", renderer=r, filename=lambda title="chart": f"{title}.png"
+        )
+        state = self._find_download_state("g-dyn-fn")
+        # state = [preview.src, format.value, title.value]
+        assert len(state) == 3
+        assert any("title" in s.get("id", "") for s in state)
+
+
+# ---------------------------------------------------------------------------
+# Autogenerate-preview error handling
+# ---------------------------------------------------------------------------
+
+
+class TestAutogeneratePreviewErrorHandling:
+    """The autogenerate-preview callback used to have no try/except;
+    a renderer raising on a specific field combination would error
+    server-side and leave the wizard in a half-broken state.
+
+    Since the fix, the callback wires the error div as an additional
+    Output and catches renderer exceptions into it, mirroring the
+    behavior of the other two preview-update callbacks.
+    """
+
+    def _find_autogen_callback(self, uid_hint: str):
+        from dash._callback import GLOBAL_CALLBACK_MAP
+
+        for key, spec in GLOBAL_CALLBACK_MAP.items():
+            # Autogen callback has preview-src as Output; distinguish
+            # from the snapshot-driven callback by the presence of a
+            # field Input (not just the snapshot store).
+            if (
+                uid_hint in key
+                and "_dcap_preview_" in key
+                and any(
+                    "_dcap_cfg_" in inp.get("id", "") for inp in spec.get("inputs", [])
+                )
+            ):
+                return key, spec
+        return None, None
+
+    def test_autogen_output_includes_error_div(self):
+        # After the fix, the callback's Output list contains (preview.src,
+        # error.children) — the error div receives renderer exceptions.
+        @renderer
+        def r(_target, _snapshot_img, title: str = "chart"):
+            _target.write(_snapshot_img())
+
+        capture_graph("g-autogen-err", renderer=r)
+        _key, spec = self._find_autogen_callback("g-autogen-err")
+        assert spec is not None, "autogenerate callback was not registered"
+        # `output` is the top-level Output grouping used by Dash; for our
+        # tuple of outputs it will be a list of two Output specs.
+        outputs = spec.get("output")
+        output_ids = []
+        # `output` can be a single Output or a grouping; normalize
+        try:
+            output_ids = [o.component_id for o in outputs]
+        except TypeError:
+            output_ids = [getattr(outputs, "component_id", None)]
+        assert any("_dcap_preview_" in oid for oid in output_ids)
+        assert any("_dcap_error_" in oid for oid in output_ids), (
+            f"expected the error div as an additional Output; got {output_ids!r}"
+        )
+
+    def test_no_autogen_callback_without_form_fields(self):
+        # Baseline: the default renderer has no fields, so there's
+        # no autogenerate callback at all (nothing to react to).
+        capture_graph("g-autogen-none")
+        _key, spec = self._find_autogen_callback("g-autogen-none")
+        assert spec is None, (
+            "autogenerate callback should not be registered when the "
+            "renderer has no form fields"
+        )

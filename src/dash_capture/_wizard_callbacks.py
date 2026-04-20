@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import io
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import dash
 from dash import Input, Output, State, dcc, html
@@ -261,6 +261,7 @@ def _register_autogenerate_preview(
     has_fig_data: bool,
     element_id: str,
     preview_id: str,
+    error_id: str,
     autogenerate_id: str,
     snapshot_store_id: str,
 ) -> None:
@@ -269,6 +270,7 @@ def _register_autogenerate_preview(
 
     @dash.callback(
         Output(preview_id, "src", allow_duplicate=True),
+        Output(error_id, "children", allow_duplicate=True),
         *[Input(s.component_id, s.component_property) for s in config.states],
         State(autogenerate_id, "value"),
         State(snapshot_store_id, "data"),
@@ -282,47 +284,85 @@ def _register_autogenerate_preview(
             *field_values, autogen, _img_b64 = args
             _fig_data = {}
         if not autogen:
-            return dash.no_update
+            return dash.no_update, dash.no_update
         if has_snapshot and not _img_b64:
-            return dash.no_update
+            return dash.no_update, dash.no_update
         kwargs = config.build_kwargs(tuple(field_values))
-        return _to_src(
-            _call_renderer(
-                renderer,
-                has_fig_data,
-                has_snapshot,
-                _fig_data,
-                _img_b64 or "",
-                kwargs,
-            )
-        )
+        try:
+            return _to_src(
+                _call_renderer(
+                    renderer,
+                    has_fig_data,
+                    has_snapshot,
+                    _fig_data,
+                    _img_b64 or "",
+                    kwargs,
+                )
+            ), ""
+        except Exception as e:
+            return dash.no_update, f"Error: {e}"
+
+
+def _resolve_download_name(
+    filename: str | Callable[..., str],
+    fmt: str | None,
+    field_kwargs: dict,
+) -> str:
+    """Resolve the final download filename.
+
+    Callable filenames are invoked with ``field_kwargs`` as keyword
+    arguments. A raised exception falls back to ``"capture.png"`` so
+    the download still works rather than failing silently. The format
+    extension is then patched in for non-PNG formats.
+    """
+    if callable(filename):
+        try:
+            dl_name = cast(Callable[..., str], filename)(**field_kwargs)
+        except Exception:
+            dl_name = "capture.png"
+    else:
+        dl_name = filename
+    if fmt and fmt != "png":
+        stem = dl_name.rsplit(".", 1)[0] if "." in dl_name else dl_name
+        ext = "jpg" if fmt == "jpeg" else fmt
+        dl_name = f"{stem}.{ext}"
+    return dl_name
 
 
 def _register_download(
     download_id: str,
     preview_id: str,
     format_id: str,
-    filename: str,
+    filename: str | Callable[..., str],
+    config: FnForm | Any = None,
 ) -> None:
-    """Download the current preview image."""
+    """Download the current preview image.
+
+    ``filename`` is either a static string or a callable that receives
+    the current form-field values as kwargs and returns the filename.
+    """
+    is_callable = callable(filename)
+    field_states = list(config.states) if (is_callable and config is not None) else []
 
     @dash.callback(
         Output(download_id, "data"),
         Input(f"{download_id}_btn", "n_clicks"),
         State(preview_id, "src"),
         State(format_id, "value"),
+        *field_states,
         prevent_initial_call=True,
     )
-    def download_figure(n_clicks, preview_src, fmt):
+    def download_figure(n_clicks, preview_src, fmt, *field_values):
         if not preview_src:
             return dash.no_update
         header, data = preview_src.split(",", 1)
         raw = base64.b64decode(data)
-        dl_name = filename
-        if fmt and fmt != "png":
-            stem = filename.rsplit(".", 1)[0] if "." in filename else filename
-            ext = "jpg" if fmt == "jpeg" else fmt
-            dl_name = f"{stem}.{ext}"
+        kwargs = (
+            config.build_kwargs(tuple(field_values))
+            if (is_callable and config is not None)
+            else {}
+        )
+        dl_name = _resolve_download_name(filename, fmt, kwargs)
         return dcc.send_bytes(raw, dl_name)
 
 
@@ -561,11 +601,12 @@ def wire_wizard(
             has_fig_data=has_fig_data,
             element_id=element_id,
             preview_id=preview_id,
+            error_id=error_id,
             autogenerate_id=autogenerate_id,
             snapshot_store_id=snapshot_store_id,
         )
 
-    _register_download(download_id, preview_id, format_id, filename)
+    _register_download(download_id, preview_id, format_id, filename, config=config)
     _register_copy_to_clipboard(copy_id, preview_id)
 
     for (btn_id, _label), action in zip(action_ids, actions, strict=False):

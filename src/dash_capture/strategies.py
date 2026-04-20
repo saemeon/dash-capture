@@ -173,6 +173,7 @@ def plotly_strategy(
     strip_title, strip_legend, strip_annotations, strip_axis_titles, \
     strip_colorbar, strip_margin : bool
         Remove the corresponding element from the figure before capture.
+        Advanced — defaults are all ``False``.
     format : str
         Output format (default ``"png"``).
 

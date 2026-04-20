@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -138,15 +139,68 @@ def _classify_params(fn: Callable) -> _RendererMeta:
     )
 
 
+def _validate_renderer_signature(fn: Callable) -> None:
+    """Raise ``ValueError`` if ``fn``'s signature has an invalid magic param.
+
+    Enforces the same rules as the :func:`renderer` decorator:
+
+    * A ``_target`` parameter must be present.
+    * Every underscore-prefixed parameter must be a known magic name
+      (``_target``, ``_snapshot_img``, ``_fig_data``). Typos raise
+      with a ``difflib``-based "did you mean ...?" hint.
+
+    Called eagerly by :func:`renderer` (decoration time) and by
+    :func:`_renderer_meta` (wizard-construction time), so the same
+    validation runs whether or not the user decorated their renderer.
+    """
+    import difflib
+
+    params = inspect.signature(fn).parameters
+    name = getattr(fn, "__name__", "<renderer>")
+
+    if "_target" not in params:
+        raise ValueError(
+            f"Renderer {name!r} must declare a ``_target`` parameter "
+            f"(file-like object the renderer writes its output to). "
+            f"Got parameters: {list(params)}"
+        )
+
+    underscore = [p for p in params if p.startswith("_")]
+    unknown = [p for p in underscore if p not in _KNOWN_MAGIC_PARAMS]
+    if unknown:
+        suggestions: list[str] = []
+        for typo in unknown:
+            close = difflib.get_close_matches(typo, _KNOWN_MAGIC_PARAMS, n=1)
+            if close:
+                suggestions.append(f"{typo} → {close[0]}")
+        msg = (
+            f"Renderer {name!r} has unknown magic parameter(s): {unknown}. "
+            f"Allowed magic names: {sorted(_KNOWN_MAGIC_PARAMS)}."
+        )
+        if suggestions:
+            msg += f" Did you mean: {', '.join(suggestions)}?"
+        raise ValueError(msg)
+
+
 def _renderer_meta(fn: Callable) -> _RendererMeta:
-    """Return cached meta if ``fn`` was decorated with ``@renderer``,
-    otherwise compute it lazily. Backward-compatible with undecorated
-    renderers — the decorator is opt-in.
+    """Return cached meta for ``fn``, computing and caching on first call.
+
+    Validates the signature (via :func:`_validate_renderer_signature`)
+    whether or not ``fn`` was decorated with :func:`renderer` — so typos
+    in magic parameter names raise at wizard construction rather than
+    producing a silently-broken wizard at runtime. The result is cached
+    on ``fn.__dcap_meta__`` so subsequent calls are free.
     """
     cached = getattr(fn, "__dcap_meta__", None)
     if isinstance(cached, _RendererMeta):
         return cached
-    return _classify_params(fn)
+    _validate_renderer_signature(fn)
+    meta = _classify_params(fn)
+    # Some callables (e.g. bound methods on slotted classes) reject
+    # attribute assignment; validation still runs, just not cached.
+    with contextlib.suppress(AttributeError, TypeError):
+        setattr(fn, "__dcap_meta__", meta)  # noqa: B010
+    return meta
 
 
 class _NullFnForm(html.Div):
@@ -191,7 +245,7 @@ class _NullFnForm(html.Div):
 
 
 def renderer(fn: Callable) -> Callable:
-    """Validate and annotate a dash-capture renderer.
+    """Validate a dash-capture renderer eagerly, at decoration time.
 
     Use as a decorator on any function passed to :func:`capture_graph`
     or :func:`capture_element` as the ``renderer=`` argument::
@@ -202,65 +256,18 @@ def renderer(fn: Callable) -> Callable:
         def my_renderer(_target, _snapshot_img, title: str = ""):
             _target.write(_snapshot_img())
 
-    The decorator validates the function's signature **at decoration
-    time** and raises :class:`ValueError` if anything is wrong. This
-    catches the entire class of silent bugs where a typo in a magic
-    parameter name (e.g. ``_snaphot_img``) makes the wizard treat it
-    as a normal form field and the capture pipeline never sees the
-    intended snapshot.
+    Validation catches typos in magic parameter names (e.g.
+    ``_snaphot_img``) that would otherwise be silently treated as form
+    fields. The same validation runs *automatically* at wizard
+    construction for undecorated renderers — this decorator just moves
+    the error earlier, from ``capture_graph(...)`` call time to module
+    import time, which is friendlier for IDEs and test suites.
 
-    Validates:
-      * ``_target`` parameter is present (mandatory — the renderer
-        writes its output here).
-      * Every underscore-prefixed parameter is one of the known magic
-        names: ``_target``, ``_snapshot_img``, ``_fig_data``. Typos
-        raise :class:`ValueError` with a "did you mean ...?" hint
-        from :mod:`difflib`.
-
-    On success, attaches a ``__dcap_meta__`` attribute (a frozen
-    dataclass) so the wizard pipeline can read pre-classified
-    parameter info instead of re-walking ``inspect.signature`` at
-    every call site. Returns the original function unmodified
-    otherwise.
-
-    Undecorated renderers still work — the wizard pipeline falls back
-    to lazy on-the-fly introspection. The decorator is opt-in but
-    strongly recommended for any non-trivial renderer.
+    Returns the function unchanged, with a pre-computed
+    ``__dcap_meta__`` attribute so the wizard pipeline skips a second
+    ``inspect.signature`` pass.
     """
-    import difflib
-
-    sig = inspect.signature(fn)
-    params = sig.parameters
-    name = getattr(fn, "__name__", "<renderer>")
-
-    # Validate _target is present
-    if "_target" not in params:
-        raise ValueError(
-            f"Renderer {name!r} must declare a ``_target`` parameter "
-            f"(file-like object the renderer writes its output to). "
-            f"Got parameters: {list(params)}"
-        )
-
-    # Validate underscore-prefixed params are all known magic names
-    underscore = [p for p in params if p.startswith("_")]
-    unknown = [p for p in underscore if p not in _KNOWN_MAGIC_PARAMS]
-    if unknown:
-        suggestions: list[str] = []
-        for typo in unknown:
-            close = difflib.get_close_matches(typo, _KNOWN_MAGIC_PARAMS, n=1)
-            if close:
-                suggestions.append(f"{typo} → {close[0]}")
-        msg = (
-            f"Renderer {name!r} has unknown magic parameter(s): {unknown}. "
-            f"Allowed magic names: {sorted(_KNOWN_MAGIC_PARAMS)}."
-        )
-        if suggestions:
-            msg += f" Did you mean: {', '.join(suggestions)}?"
-        raise ValueError(msg)
-
-    # Compute meta and attach. Use setattr (rather than direct attribute
-    # assignment) so static checkers don't complain about an "unknown"
-    # attribute on a generic Callable.
+    _validate_renderer_signature(fn)
     setattr(fn, "__dcap_meta__", _classify_params(fn))  # noqa: B010
     return fn
 
@@ -328,7 +335,7 @@ class WizardConfig:
     renderer: Callable
     strategy: CaptureStrategy
     trigger: str | Any
-    filename: str
+    filename: str | Callable[..., str]
     preprocess: str | None = None
     autogenerate: bool = True
     persist: bool = True
@@ -530,7 +537,7 @@ def capture_graph(
     trigger: str | Any = "modebar",
     strategy: CaptureStrategy | None = None,
     preprocess: str | None = None,
-    filename: str = "figure.png",
+    filename: str | Callable[..., str] = "figure.png",
     autogenerate: bool = True,
     persist: bool = True,
     styles: dict | None = None,
@@ -571,8 +578,12 @@ def capture_graph(
         to strip Plotly decorations before capture.
     preprocess : str, optional
         Custom JS preprocess code (browser-side, security-sensitive).
-    filename : str
-        Download filename (default ``"figure.png"``).
+    filename : str or callable
+        Download filename. A string is used verbatim (with the format
+        extension patched in for non-PNG downloads). A callable
+        receives the renderer's form-field values as keyword
+        arguments and returns the filename, allowing dynamic names
+        driven by wizard inputs. Default ``"figure.png"``.
     autogenerate : bool
         Regenerate preview on field changes (default ``True``).
     persist : bool
@@ -665,7 +676,7 @@ def capture_element(
     trigger: str | Any = "Capture",
     strategy: CaptureStrategy | None = None,
     preprocess: str | None = None,
-    filename: str = "capture.png",
+    filename: str | Callable[..., str] = "capture.png",
     autogenerate: bool = True,
     persist: bool = True,
     styles: dict | None = None,
@@ -702,8 +713,10 @@ def capture_element(
         a Plotly graph through this entry point.
     preprocess : str, optional
         Custom JS preprocess code.
-    filename : str
-        Download filename (default ``"capture.png"``).
+    filename : str or callable
+        Download filename. See :func:`capture_graph` — a callable
+        receives form-field values and returns the filename.
+        Default ``"capture.png"``.
     autogenerate : bool
         Regenerate preview on field changes (default ``True``).
     persist : bool
