@@ -65,9 +65,10 @@ class TestBordered:
         assert "color" in params
         assert "width" in params
 
-    def test_decorated_with_renderer(self):
-        # @renderer attaches __dcap_meta__
-        meta = bordered.__dcap_meta__
+    def test_classifies_as_snapshot_renderer(self):
+        from dash_capture.capture import _renderer_meta
+
+        meta = _renderer_meta(bordered)
         assert meta.has_snapshot is True
         assert meta.fields == ("color", "width")
 
@@ -108,8 +109,10 @@ class TestTitled:
         result = _read_png(target.getvalue())
         assert result.height == 50 + 40
 
-    def test_decorated_with_renderer(self):
-        meta = titled.__dcap_meta__
+    def test_classifies_as_snapshot_renderer(self):
+        from dash_capture.capture import _renderer_meta
+
+        meta = _renderer_meta(titled)
         assert meta.has_snapshot is True
         assert "title" in meta.fields
         assert "subtitle" in meta.fields
@@ -156,8 +159,10 @@ class TestWatermarked:
         watermarked(target, lambda: _make_png(), opacity=-1.0)
         assert target.getvalue()[:4] == b"\x89PNG"
 
-    def test_decorated_with_renderer(self):
-        meta = watermarked.__dcap_meta__
+    def test_classifies_as_snapshot_renderer(self):
+        from dash_capture.capture import _renderer_meta
+
+        meta = _renderer_meta(watermarked)
         assert meta.has_snapshot is True
         assert "text" in meta.fields
         assert "opacity" in meta.fields

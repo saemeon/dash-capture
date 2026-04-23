@@ -37,8 +37,6 @@ except ImportError as e:  # pragma: no cover
         "Install it with: pip install 'dash-capture[pil]'"
     ) from e
 
-from dash_capture.capture import renderer
-
 
 def _load_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
     """Return a portable font at the requested size.
@@ -53,7 +51,6 @@ def _load_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
-@renderer
 def bordered(
     _target,
     _snapshot_img,
@@ -82,7 +79,6 @@ def bordered(
     _target.write(buf.getvalue())
 
 
-@renderer
 def titled(
     _target,
     _snapshot_img,
@@ -128,7 +124,6 @@ def titled(
     _target.write(buf.getvalue())
 
 
-@renderer
 def watermarked(
     _target,
     _snapshot_img,

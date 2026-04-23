@@ -6,9 +6,9 @@ Captures a ``dash_table.DataTable`` to PNG using ``capture_element`` and
   1. passthrough — write the raw screenshot bytes to the download target
   2. titled     — wrap the screenshot with a PIL title bar before download
 
-Both renderers are decorated with ``@renderer`` so the magic parameter
-names are validated at definition time (typos raise ``ValueError`` here
-instead of silently breaking the wizard).
+Magic parameter names are validated when the wizard is constructed, so
+typos (e.g. ``_snaphot_img``) raise ``ValueError`` with a "did you
+mean ...?" hint.
 
 The ``titled`` function below is an inline demonstration of the
 renderer-writing pattern. For production use, prefer the equivalent
@@ -23,7 +23,7 @@ import dash
 import pandas as pd
 from dash import dash_table, html
 
-from dash_capture import capture_element, renderer
+from dash_capture import capture_element
 
 # --- sample table ---
 df = pd.DataFrame(
@@ -57,7 +57,6 @@ table = dash_table.DataTable(
 # ---------------------------------------------------------------------------
 
 
-@renderer
 def passthrough(_target, _snapshot_img):
     """No parameters → wizard shows just Generate + Download.
 
@@ -66,7 +65,6 @@ def passthrough(_target, _snapshot_img):
     _target.write(_snapshot_img())
 
 
-@renderer
 def titled(
     _target,
     _snapshot_img,

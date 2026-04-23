@@ -4,8 +4,6 @@ Showcases:
 
 * The full range of auto-generated form field types
   (``str``, ``int``, ``float``, ``bool``, ``Literal``, ``date``)
-* The ``@renderer`` decorator for definition-time validation of magic
-  parameter names (``_target``, ``_snapshot_img``, ``_fig_data``)
 * Strip-patch and format-selection strategies via ``plotly_strategy``
 * DOM-element capture via ``capture_element`` + html2canvas
 * Built-in PIL renderers from ``dash_capture.pil``
@@ -23,7 +21,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import dash_table, dcc, html
 
-from dash_capture import capture_element, capture_graph, plotly_strategy, renderer
+from dash_capture import capture_element, capture_graph, plotly_strategy
 from dash_capture.pil import bordered as pil_bordered
 from dash_capture.pil import titled as pil_titled
 from dash_capture.pil import watermarked as pil_watermarked
@@ -55,13 +53,11 @@ graph = dcc.Graph(id="demo-graph", figure=fig)
 # ---------------------------------------------------------------------------
 
 
-# Each renderer below is decorated with ``@renderer`` so the magic
-# parameter names (``_target``, ``_snapshot_img``, ``_fig_data``) are
-# validated at definition time. A typo like ``_snaphot_img`` would raise
-# ``ValueError`` here instead of silently breaking the wizard at runtime.
+# Magic parameter names (``_target``, ``_snapshot_img``, ``_fig_data``)
+# are validated when the wizard is constructed — a typo like
+# ``_snaphot_img`` raises ``ValueError`` with a "did you mean ...?" hint.
 
 
-@renderer
 def passthrough(_target, _snapshot_img):
     """No user parameters → empty wizard (just Generate + Download).
 
@@ -72,7 +68,6 @@ def passthrough(_target, _snapshot_img):
     _target.write(_snapshot_img())
 
 
-@renderer
 def str_and_int_renderer(
     _target,
     _snapshot_img,
@@ -103,7 +98,6 @@ def str_and_int_renderer(
         plt.close(fig_mpl)
 
 
-@renderer
 def literal_and_bool_renderer(
     _target,
     _snapshot_img,
@@ -131,7 +125,6 @@ def literal_and_bool_renderer(
     _target.write(buf.getvalue())
 
 
-@renderer
 def float_renderer(
     _target,
     _snapshot_img,
@@ -152,7 +145,6 @@ def float_renderer(
     _target.write(buf.getvalue())
 
 
-@renderer
 def date_renderer(
     _target,
     _snapshot_img,
@@ -175,7 +167,6 @@ def date_renderer(
     _target.write(buf.getvalue())
 
 
-@renderer
 def figdata_renderer(
     _target,
     _fig_data,
@@ -203,7 +194,6 @@ def figdata_renderer(
     _target.write(text.encode())
 
 
-@renderer
 def table_titled_renderer(
     _target,
     _snapshot_img,
@@ -229,7 +219,6 @@ def table_titled_renderer(
     _target.write(buf.getvalue())
 
 
-@renderer
 def error_renderer(
     _target,
     _snapshot_img,
@@ -518,9 +507,9 @@ app.layout = html.Div(
         html.H3("Built-in PIL renderers — dash_capture.pil"),
         html.P(
             "Three batteries-included renderers that decorate captured "
-            "screenshots using Pillow. Each one is decorated with "
-            "@renderer and exposes type-hinted parameters as auto-generated "
-            "form fields. Requires the [pil] extra: pip install 'dash-capture[pil]'."
+            "screenshots using Pillow. Each one exposes type-hinted "
+            "parameters as auto-generated form fields. Requires the "
+            "[pil] extra: pip install 'dash-capture[pil]'."
         ),
         html.Div(
             style=SECTION,

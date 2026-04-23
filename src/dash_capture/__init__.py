@@ -22,7 +22,6 @@ Public API:
 * :func:`capture_graph` — wizard for ``dcc.Graph`` (Plotly strategy)
 * :func:`capture_element` — wizard for any DOM element (html2canvas)
 * :func:`capture_binding` — low-level JS-capture → ``dcc.Store`` binding
-* :func:`renderer` — decorator validating magic param names at definition time
 * :class:`CaptureStrategy`, :func:`plotly_strategy`,
   :func:`html2canvas_strategy`, :func:`canvas_strategy` — capture strategies
 * :class:`ModebarButton`, :class:`ModebarIcon`,
@@ -53,7 +52,6 @@ from dash_capture.capture import (
     capture_binding,
     capture_element,
     capture_graph,
-    renderer,
 )
 from dash_capture.strategies import (
     CaptureStrategy,
@@ -69,8 +67,6 @@ __all__ = [
     # high-level (wizard)
     "capture_graph",
     "capture_element",
-    # renderer protocol
-    "renderer",
     # strategies
     "CaptureStrategy",
     "plotly_strategy",

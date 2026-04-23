@@ -10,7 +10,7 @@ import pytest
 from dash import dcc, html
 from dash_fn_form import FieldHook, FromComponent
 
-from dash_capture._wizard_callbacks import (
+from dash_capture._wizard import (
     _make_snapshot_fn,
     _resolve_download_name,
     _to_src,
@@ -30,7 +30,6 @@ from dash_capture.capture import (
     capture_binding,
     capture_element,
     capture_graph,
-    renderer,
 )
 from dash_capture.strategies import html2canvas_strategy, plotly_strategy
 
@@ -360,7 +359,7 @@ class TestShowFormatInWizard:
 
 
 # ---------------------------------------------------------------------------
-# @renderer decorator + _classify_params + _renderer_meta
+# _classify_params + _renderer_meta (validation is always-on)
 # ---------------------------------------------------------------------------
 
 
@@ -417,48 +416,31 @@ class TestClassifyParams:
         assert meta.fields == ("message",)
 
 
-class TestRendererDecorator:
-    """``@renderer`` validates magic names and attaches __dcap_meta__."""
+class TestRendererMeta:
+    """``_renderer_meta`` validates + classifies + caches."""
 
-    def test_returns_function_unchanged(self):
-        def fn(_target, _snapshot_img):
-            pass
-
-        decorated = renderer(fn)
-        assert decorated is fn  # same object, no wrapping
-
-    def test_attaches_meta(self):
-        @renderer
+    def test_validation_result_cached_on_fn(self):
         def fn(_target, _snapshot_img, title: str = ""):
             pass
 
-        meta = fn.__dcap_meta__
+        meta = _renderer_meta(fn)
         assert isinstance(meta, _RendererMeta)
-        assert meta.has_snapshot is True
-        assert meta.fields == ("title",)
-
-    def test_callable_after_decoration(self):
-        @renderer
-        def fn(_target, _snapshot_img):
-            _target.write(_snapshot_img())
-
-        target = io.BytesIO()
-        fn(target, lambda: b"hello")
-        assert target.getvalue() == b"hello"
+        # Cached on the function for subsequent calls
+        assert getattr(fn, "__dcap_meta__", None) is meta
 
     def test_raises_when_target_missing(self):
         def fn(_snapshot_img):
             pass
 
         with pytest.raises(ValueError, match="must declare a ``_target``"):
-            renderer(fn)
+            _renderer_meta(fn)
 
     def test_raises_on_typo_with_suggestion(self):
         def fn(_target, _snaphot_img):  # typo: missing 's'
             pass
 
         with pytest.raises(ValueError) as exc_info:
-            renderer(fn)
+            _renderer_meta(fn)
         msg = str(exc_info.value)
         assert "_snaphot_img" in msg
         assert "Did you mean" in msg
@@ -469,47 +451,42 @@ class TestRendererDecorator:
             pass
 
         with pytest.raises(ValueError, match="unknown magic parameter"):
-            renderer(fn)
+            _renderer_meta(fn)
 
     def test_raises_on_image_typo(self):
         def fn(_target, _snapshot_image):  # extra 'image' suffix
             pass
 
         with pytest.raises(ValueError) as exc_info:
-            renderer(fn)
+            _renderer_meta(fn)
         assert "_snapshot_image" in str(exc_info.value)
 
     def test_accepts_capture_star_params(self):
-        @renderer
         def fn(_target, _snapshot_img, capture_width: int = 800):
             pass
 
+        meta = _renderer_meta(fn)
         # capture_* doesn't start with `_` so it's not subject to the magic-name
         # whitelist; should pass validation and end up in active_capture
-        assert fn.__dcap_meta__.active_capture == ("capture_width",)
-        assert fn.__dcap_meta__.fields == ()
+        assert meta.active_capture == ("capture_width",)
+        assert meta.fields == ()
 
     def test_accepts_minimal_target_only(self):
         # A renderer with just _target is valid (writes constant content)
-        @renderer
         def fn(_target):
             _target.write(b"const")
 
-        assert fn.__dcap_meta__.has_snapshot is False
-        assert fn.__dcap_meta__.has_fig_data is False
+        meta = _renderer_meta(fn)
+        assert meta.has_snapshot is False
+        assert meta.has_fig_data is False
 
-
-class TestRendererMeta:
-    """``_renderer_meta`` reads cached attribute or falls back to lazy compute."""
-
-    def test_uses_cached_meta_if_decorated(self):
-        @renderer
+    def test_uses_cached_meta(self):
         def fn(_target, _snapshot_img, title: str = ""):
             pass
 
-        cached = fn.__dcap_meta__
-        meta = _renderer_meta(fn)
-        assert meta is cached  # exact same object — no recomputation
+        first = _renderer_meta(fn)
+        second = _renderer_meta(fn)
+        assert first is second  # exact same object — no recomputation
 
     def test_lazy_fallback_for_undecorated(self):
         def fn(_target, _snapshot_img, title: str = ""):
@@ -1023,7 +1000,6 @@ class TestDownloadCallbackWiring:
 
     def test_static_filename_excludes_field_states(self):
         # Static string → callback depends only on preview_src and format
-        @renderer
         def r(_target, _snapshot_img, title: str = "chart"):
             _target.write(_snapshot_img())
 
@@ -1035,7 +1011,6 @@ class TestDownloadCallbackWiring:
 
     def test_callable_filename_includes_field_states(self):
         # Callable → callback must have access to the field values
-        @renderer
         def r(_target, _snapshot_img, title: str = "chart"):
             _target.write(_snapshot_img())
 
@@ -1083,7 +1058,6 @@ class TestAutogeneratePreviewErrorHandling:
     def test_autogen_output_includes_error_div(self):
         # After the fix, the callback's Output list contains (preview.src,
         # error.children) — the error div receives renderer exceptions.
-        @renderer
         def r(_target, _snapshot_img, title: str = "chart"):
             _target.write(_snapshot_img())
 

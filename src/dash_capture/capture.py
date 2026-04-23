@@ -17,7 +17,7 @@ from dash_fn_form import Field, FieldHook, FnForm, FromComponent
 
 from dash_capture._ids import _new_id
 from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
-from dash_capture._wizard_callbacks import wire_wizard
+from dash_capture._wizard import wire_wizard
 from dash_capture.strategies import (
     _HTML2CANVAS_CAPTURE,
     CaptureStrategy,
@@ -98,7 +98,8 @@ def _resolve_show_format(show_format: bool | None, has_snapshot: bool) -> bool:
 # ---------------------------------------------------------------------------
 
 #: Underscore-prefixed parameter names a renderer is allowed to declare.
-#: Anything else starting with ``_`` is rejected as a typo by ``@renderer``.
+#: Anything else starting with ``_`` is rejected as a typo at wizard
+#: construction time by :func:`_validate_renderer_signature`.
 _KNOWN_MAGIC_PARAMS = frozenset({"_target", "_snapshot_img", "_fig_data"})
 
 
@@ -106,10 +107,10 @@ _KNOWN_MAGIC_PARAMS = frozenset({"_target", "_snapshot_img", "_fig_data"})
 class _RendererMeta:
     """Pre-computed classification of a renderer's parameters.
 
-    Built once at ``@renderer`` decoration time (or lazily by
-    ``_renderer_meta`` for undecorated renderers) and read by
-    ``_make_wizard`` instead of re-walking ``inspect.signature`` at
-    every call site.
+    Built lazily by :func:`_renderer_meta` at wizard-construction time
+    and cached on the renderer's ``__dcap_meta__`` attribute so that
+    subsequent ``capture_graph`` / ``capture_element`` calls skip the
+    ``inspect.signature`` + validation pass.
     """
 
     has_snapshot: bool
@@ -122,8 +123,8 @@ def _classify_params(fn: Callable) -> _RendererMeta:
     """Walk a renderer's signature and classify each parameter.
 
     Returns a populated ``_RendererMeta``. Does not validate magic
-    names — that's the decorator's job. ``_make_wizard`` calls this
-    directly for undecorated renderers (backward-compatible).
+    names — validation is a separate pass in
+    :func:`_validate_renderer_signature`.
     """
     params = inspect.signature(fn).parameters
     has_snapshot = "_snapshot_img" in params
@@ -142,16 +143,15 @@ def _classify_params(fn: Callable) -> _RendererMeta:
 def _validate_renderer_signature(fn: Callable) -> None:
     """Raise ``ValueError`` if ``fn``'s signature has an invalid magic param.
 
-    Enforces the same rules as the :func:`renderer` decorator:
+    Rules:
 
     * A ``_target`` parameter must be present.
     * Every underscore-prefixed parameter must be a known magic name
       (``_target``, ``_snapshot_img``, ``_fig_data``). Typos raise
       with a ``difflib``-based "did you mean ...?" hint.
 
-    Called eagerly by :func:`renderer` (decoration time) and by
-    :func:`_renderer_meta` (wizard-construction time), so the same
-    validation runs whether or not the user decorated their renderer.
+    Called by :func:`_renderer_meta` at wizard-construction time, so
+    every renderer is validated when it's first used.
     """
     import difflib
 
@@ -185,11 +185,10 @@ def _validate_renderer_signature(fn: Callable) -> None:
 def _renderer_meta(fn: Callable) -> _RendererMeta:
     """Return cached meta for ``fn``, computing and caching on first call.
 
-    Validates the signature (via :func:`_validate_renderer_signature`)
-    whether or not ``fn`` was decorated with :func:`renderer` — so typos
-    in magic parameter names raise at wizard construction rather than
-    producing a silently-broken wizard at runtime. The result is cached
-    on ``fn.__dcap_meta__`` so subsequent calls are free.
+    Validates the signature via :func:`_validate_renderer_signature` so
+    typos in magic parameter names raise at wizard construction rather
+    than producing a silently-broken wizard at runtime. The result is
+    cached on ``fn.__dcap_meta__`` so subsequent calls are free.
     """
     cached = getattr(fn, "__dcap_meta__", None)
     if isinstance(cached, _RendererMeta):
@@ -242,34 +241,6 @@ class _NullFnForm(html.Div):
 
     def build_kwargs(self, _values) -> dict:
         return {}
-
-
-def renderer(fn: Callable) -> Callable:
-    """Validate a dash-capture renderer eagerly, at decoration time.
-
-    Use as a decorator on any function passed to :func:`capture_graph`
-    or :func:`capture_element` as the ``renderer=`` argument::
-
-        from dash_capture import capture_graph, renderer
-
-        @renderer
-        def my_renderer(_target, _snapshot_img, title: str = ""):
-            _target.write(_snapshot_img())
-
-    Validation catches typos in magic parameter names (e.g.
-    ``_snaphot_img``) that would otherwise be silently treated as form
-    fields. The same validation runs *automatically* at wizard
-    construction for undecorated renderers — this decorator just moves
-    the error earlier, from ``capture_graph(...)`` call time to module
-    import time, which is friendlier for IDEs and test suites.
-
-    Returns the function unchanged, with a pre-computed
-    ``__dcap_meta__`` attribute so the wizard pipeline skips a second
-    ``inspect.signature`` pass.
-    """
-    _validate_renderer_signature(fn)
-    setattr(fn, "__dcap_meta__", _classify_params(fn))  # noqa: B010
-    return fn
 
 
 @dataclass
@@ -398,8 +369,8 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
     rendered ``html.Div`` wizard. Steps:
 
     1. Apply ``preprocess`` to the strategy (if any).
-    2. Look up renderer metadata via :func:`_renderer_meta` (cached if
-       the renderer was ``@renderer``-decorated).
+    2. Validate and classify the renderer via :func:`_renderer_meta`
+       (cached on ``fn.__dcap_meta__`` after the first call).
     3. Resolve ``show_format`` (auto → True/False based on has_snapshot).
     4. Merge ``field_specs`` with persistence defaults if requested.
     5. Mint per-wizard component IDs.
@@ -413,9 +384,8 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
     if cfg.preprocess is not None:
         strategy = CaptureStrategy(preprocess=cfg.preprocess, capture=strategy.capture)
 
-    # Read pre-classified renderer metadata. If the renderer was decorated
-    # with ``@renderer`` we use the cached meta from ``__dcap_meta__``;
-    # otherwise we compute it lazily here.
+    # Validate + classify the renderer (cached on fn.__dcap_meta__
+    # after the first call, so repeat capture_graph()s are free).
     meta = _renderer_meta(cfg.renderer)
     has_snapshot = meta.has_snapshot
     has_fig_data = meta.has_fig_data
@@ -564,12 +534,13 @@ def capture_graph(
         unchanged — the wizard then shows just *Generate* + *Download*
         with no extra fields and no third-party dependencies.
 
-        Strongly recommended: decorate custom renderers with
-        :func:`renderer` so the magic parameter names
-        (``_target`` / ``_snapshot_img`` / ``_fig_data``) are
-        validated at definition time. Built-in PIL renderers
-        (``bordered`` / ``titled`` / ``watermarked``) are available
-        in :mod:`dash_capture.pil` (requires the ``[pil]`` extra).
+        Magic parameter names (``_target`` / ``_snapshot_img`` /
+        ``_fig_data``) are validated when the wizard is constructed,
+        so a typo like ``_snaphot_img`` raises :class:`ValueError`
+        with a ``difflib``-based "did you mean ...?" hint. Built-in
+        PIL renderers (``bordered`` / ``titled`` / ``watermarked``)
+        are available in :mod:`dash_capture.pil` (requires the
+        ``[pil]`` extra).
     trigger : str, Dash component, or ModebarButton
         String label, custom component, ``"modebar"``, or :class:`ModebarButton`.
     strategy : CaptureStrategy, optional
@@ -649,12 +620,11 @@ def capture_graph(
         >>> from dash_capture.pil import titled
         >>> wizard = capture_graph("my-graph", renderer=titled)
 
-    With a custom renderer (decorated for typo validation)::
+    With a custom renderer::
 
-        >>> from dash_capture import capture_graph, renderer
+        >>> from dash_capture import capture_graph
         >>>
-        >>> @renderer
-        ... def my_renderer(_target, _snapshot_img, dpi: int = 150):
+        >>> def my_renderer(_target, _snapshot_img, dpi: int = 150):
         ...     _target.write(_snapshot_img())
         >>>
         >>> wizard = capture_graph("my-graph", renderer=my_renderer)
