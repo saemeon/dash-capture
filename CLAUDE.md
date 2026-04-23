@@ -231,3 +231,53 @@ symmetric error handling if "wizard won't close" issues ever resurface.
 - `examples/table_capture_demo.py` — `capture_element` against a `dash_table.DataTable`.
 - `examples/modebar_demo.py` — minimal repro harness for modebar-button
   behavior (default emoji + custom SVG icon variants).
+- `examples/hbar_labels_repro.py` — disappearing-y-label repro for
+  horizontal bar charts across capture sizes; used to attribute
+  "Mode A vs Mode B" in the Plotly auto-tick discussion (see
+  "Future improvements" below).
+
+## Future improvements
+
+Not blocking anything today, parked here so the context survives the
+next time someone asks.
+
+- **Offscreen-clone always, when `capture_width`/`capture_height` are
+  present.** Today the offscreen-clone preprocess in
+  [_build_plotly_preprocess](src/dash_capture/strategies.py) only
+  runs when there are strip patches; without patches, `Plotly.toImage`
+  is called directly on the live graph. That inherits the live DOM's
+  tick decisions, which is fine most of the time but can't recover
+  from edge cases where live and target dimensions differ enough that
+  fresh layout would matter. Proposed change: also return a preprocess
+  (offscreen clone + `Plotly.newPlot` at target dimensions) when
+  ``"capture_width" in params or "capture_height" in params``, even
+  with no strip patches. Cost: +100–200ms per capture. See
+  `examples/hbar_labels_repro.py` for the test case.
+
+- **More capture configuration hooks.** `capture_graph` currently
+  exposes `strategy`, `preprocess`, `capture_resolver`, `actions`,
+  `field_specs`, etc., but some concerns are still tightly wired:
+  - Categorical-axis tick behavior (the hbar-labels case). If a user
+    wants "always show every category label during capture regardless
+    of target size", they have to mutate their figure. A future option
+    could let a downstream composer (e.g. SNBGraph) inject
+    `tickmode="linear"` on categorical axes *only inside the capture
+    clone* — keeping the live figure unchanged while guaranteeing
+    corporate-export fidelity. Shape TBD; likely a
+    ``layout_override: Callable[[dict], dict]`` hook applied to the
+    cloned layout in the offscreen-clone preprocess.
+  - Font / margin / background-color overrides at capture time that
+    don't bleed into the live chart, driven by the same hook above.
+  - A hook for fully replacing the preprocess layout ("here's the
+    figure I actually want to capture, regardless of what's on
+    screen"). This is already achievable via a custom `strategy` +
+    `preprocess` JS string, but the JS-string API is footgun-prone.
+    A Python-side hook that constructs the modified layout as a dict
+    would be friendlier.
+
+  Status: not needed in production yet. The `hbar_labels_repro.py`
+  example documents the "Mode A vs Mode B" distinction so future-you
+  can quickly tell whether a reported label issue is fixable in
+  dash-capture (Mode A, would benefit from the offscreen-clone
+  change) or inherent to Plotly's auto-tick at small sizes (Mode B,
+  needs a `layout_override` hook or figure-side fix).
