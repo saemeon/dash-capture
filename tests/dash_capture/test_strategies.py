@@ -161,6 +161,57 @@ class TestHtml2canvasStrategy:
         s = html2canvas_strategy()
         assert "opts.format" in s.capture
 
+    def test_capture_restores_saved_styles_in_finally(self):
+        s = html2canvas_strategy()
+        assert "finally" in s.capture
+        assert "_dcap_saved" in s.capture
+
+    def test_no_preprocess_without_capture_dims(self):
+        s = html2canvas_strategy(_params={})
+        assert s.preprocess is None
+
+    def test_preprocess_emitted_for_capture_width(self):
+        s = html2canvas_strategy(_params={"capture_width": None})
+        assert s.preprocess is not None
+        assert "opts.width" in s.preprocess
+        # No height in params → no height assignment
+        assert "opts.height" not in s.preprocess
+
+    def test_preprocess_emitted_for_capture_height(self):
+        s = html2canvas_strategy(_params={"capture_height": None})
+        assert s.preprocess is not None
+        assert "opts.height" in s.preprocess
+        assert "opts.width" not in s.preprocess
+
+    def test_preprocess_emitted_for_both_dims(self):
+        s = html2canvas_strategy(
+            _params={"capture_width": None, "capture_height": None}
+        )
+        assert s.preprocess is not None
+        assert "opts.width" in s.preprocess
+        assert "opts.height" in s.preprocess
+
+    def test_preprocess_saves_styles_for_finally(self):
+        s = html2canvas_strategy(_params={"capture_width": None})
+        assert "_dcap_saved" in s.preprocess
+
+    def test_preprocess_settle_frames_default(self):
+        s = html2canvas_strategy(_params={"capture_width": None})
+        assert "i < 2" in s.preprocess
+
+    def test_preprocess_settle_frames_custom(self):
+        s = html2canvas_strategy(
+            settle_frames=5, _params={"capture_width": None}
+        )
+        assert "i < 5" in s.preprocess
+
+    def test_preprocess_does_not_set_visibility_hidden(self):
+        # Regression: visibility:hidden cascades to children and html2canvas
+        # skips hidden elements, dropping all text from the captured image.
+        # The resize-flicker is preferred over a silently-empty capture.
+        s = html2canvas_strategy(_params={"capture_width": None})
+        assert "visibility" not in s.preprocess
+
 
 class TestCanvasStrategy:
     def test_capture_js(self):
@@ -296,6 +347,12 @@ def _all_built_in_strategy_js() -> list[tuple[str, str]]:
         ),
         ("html2canvas", html2canvas_strategy()),
         ("html2canvas_jpeg", html2canvas_strategy(format="jpeg")),
+        (
+            "html2canvas_reflow",
+            html2canvas_strategy(
+                _params={"capture_width": None, "capture_height": None}
+            ),
+        ),
         ("canvas", canvas_strategy()),
         ("canvas_webp", canvas_strategy(format="webp")),
     ]:

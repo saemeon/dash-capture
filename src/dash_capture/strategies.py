@@ -9,8 +9,8 @@ Built-in strategies: ``plotly_strategy``, ``html2canvas_strategy``,
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -28,16 +28,27 @@ class CaptureStrategy:
         string (or a Promise thereof).
     format : str
         Default output format: ``"png"``, ``"jpeg"``, ``"webp"``, ``"svg"``.
+    _rebuild : callable or None
+        Internal hook used by :func:`capture_graph` / :func:`capture_element`
+        to wire renderer-declared ``capture_*`` parameters into a strategy
+        the user has already constructed. Strategy factories that consume
+        ``_params`` (``plotly_strategy``, ``html2canvas_strategy``,
+        ``dygraph_strategy``) set this to a closure that re-runs the
+        factory with ``_params`` injected. ``None`` means "don't rewire."
+        Users should not set this directly.
 
     Notes
     -----
-    Both fields execute as JavaScript in the browser. Never pass untrusted
-    user input into these fields.
+    Both ``preprocess`` and ``capture`` execute as JavaScript in the
+    browser. Never pass untrusted user input into these fields.
     """
 
     preprocess: str | None = None
     capture: str = ""
     format: str = "png"
+    _rebuild: Callable[[Mapping], "CaptureStrategy"] | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,20 +146,64 @@ _HTML2CANVAS_CAPTURE = """\
                         + 'Include it via app.scripts or external_scripts.');
                     return window.dash_clientside.no_update;
                 }
-                const canvas = await html2canvas(el, {
-                    scale: opts.scale || 2,
-                    useCORS: true,
-                    logging: false
-                });
-                const mime = opts.format === 'jpg'
-                    ? 'image/jpeg' : 'image/' + (opts.format || 'png');
-                return canvas.toDataURL(mime, opts.quality || undefined);"""
+                try {
+                    const canvas = await html2canvas(el, {
+                        scale: opts.scale || 2,
+                        useCORS: true,
+                        logging: false
+                    });
+                    const mime = opts.format === 'jpg'
+                        ? 'image/jpeg' : 'image/' + (opts.format || 'png');
+                    return canvas.toDataURL(mime, opts.quality || undefined);
+                } finally {
+                    if (el._dcap_saved) {
+                        el.style.width = el._dcap_saved.w;
+                        el.style.height = el._dcap_saved.h;
+                        delete el._dcap_saved;
+                    }
+                }"""
 
 _CANVAS_CAPTURE = """\
                 const cvs = el.querySelector('canvas') || el;
                 const mime = opts.format === 'jpg'
                     ? 'image/jpeg' : 'image/' + (opts.format || 'png');
                 return cvs.toDataURL(mime, opts.quality || undefined);"""
+
+
+def _build_html2canvas_reflow_preprocess(
+    has_width: bool,
+    has_height: bool,
+    settle_frames: int,
+) -> str:
+    """Build JS preprocess that live-resizes the element to opts.width/height.
+
+    Saves original inline ``width``/``height`` on ``el._dcap_saved`` so
+    the capture JS's ``finally`` block can restore them. Settles for
+    ``settle_frames`` rAF ticks so ResizeObservers (dygraphs, ECharts,
+    DataTable column-width JS) have time to re-lay-out before
+    html2canvas snapshots.
+
+    Note: we deliberately do NOT use ``visibility: hidden`` to suppress
+    the resize flicker — visibility cascades to descendants and
+    html2canvas skips ``visibility: hidden`` elements, which would
+    drop all the text content from the captured image. A brief flicker
+    is acceptable for a deliberate capture click; correct output is not
+    optional.
+    """
+    set_w = "if (opts.width != null) el.style.width = opts.width + 'px';"
+    set_h = "if (opts.height != null) el.style.height = opts.height + 'px';"
+    set_dims = "\n                ".join(
+        x for x, on in [(set_w, has_width), (set_h, has_height)] if on
+    )
+    return f"""\
+                el._dcap_saved = {{
+                    w: el.style.width,
+                    h: el.style.height
+                }};
+                {set_dims}
+                for (let i = 0; i < {settle_frames}; i++) {{
+                    await new Promise(r => requestAnimationFrame(r));
+                }}"""
 
 
 # ---------------------------------------------------------------------------
@@ -196,22 +251,86 @@ def plotly_strategy(
     )
     preprocess = _build_plotly_preprocess(patches, _params or {})
     capture = _PLOTLY_CAPTURE if preprocess else _PLOTLY_CAPTURE_SIMPLE
-    return CaptureStrategy(preprocess=preprocess, capture=capture, format=format)
+    return CaptureStrategy(
+        preprocess=preprocess,
+        capture=capture,
+        format=format,
+        _rebuild=lambda p: plotly_strategy(
+            strip_title=strip_title,
+            strip_legend=strip_legend,
+            strip_annotations=strip_annotations,
+            strip_axis_titles=strip_axis_titles,
+            strip_colorbar=strip_colorbar,
+            strip_margin=strip_margin,
+            format=format,
+            _params=p,
+        ),
+    )
 
 
-def html2canvas_strategy(format: str = "png") -> CaptureStrategy:
+def html2canvas_strategy(
+    format: str = "png",
+    settle_frames: int = 2,
+    _params: Mapping | None = None,
+) -> CaptureStrategy:
     """``html2canvas`` strategy for capturing arbitrary DOM elements.
+
+    When the renderer declares ``capture_width`` and/or ``capture_height``
+    parameters, the strategy emits a live-resize preprocess: the element
+    is temporarily resized to the target dimensions, the browser is given
+    a few ``requestAnimationFrame`` ticks to settle (so ``ResizeObserver``
+    listeners and any JS-driven layout — dygraphs redraws,
+    ``dash_table.DataTable`` column-width recompute, etc. — can react),
+    html2canvas snapshots, and original inline styles are restored in a
+    ``finally`` block. This mirrors how :func:`plotly_strategy` already
+    consumes ``capture_width``/``capture_height``.
 
     Parameters
     ----------
     format : str
         Output format (default ``"png"``).
+    settle_frames : int
+        Number of ``requestAnimationFrame`` ticks to await between
+        resizing the element and capturing. Default ``2`` covers most
+        ResizeObserver-driven components; bump higher for components
+        that animate layout changes.
 
     Returns
     -------
     CaptureStrategy
+
+    Notes
+    -----
+    Live-resize is visible to the user as a brief flicker — the chart
+    or layout reflows in place before the screenshot is taken, then
+    snaps back. This is intentional: any "hide during capture"
+    mechanism (``visibility: hidden``, ``opacity: 0``) cascades to
+    descendants, and html2canvas skips hidden elements, which would
+    silently drop all text from the captured image. The flicker is
+    the price of correctness.
+
+    Live-resize also triggers any user-installed ``ResizeObserver``
+    callbacks and may flush Dash resize-driven callbacks during the
+    capture window. For deliberate "Capture" button clicks this is
+    almost always benign, but be aware if your app has expensive
+    resize handlers.
     """
-    return CaptureStrategy(capture=_HTML2CANVAS_CAPTURE, format=format)
+    params = _params or {}
+    has_w = "capture_width" in params
+    has_h = "capture_height" in params
+    preprocess: str | None = None
+    if has_w or has_h:
+        preprocess = _build_html2canvas_reflow_preprocess(
+            has_w, has_h, settle_frames
+        )
+    return CaptureStrategy(
+        preprocess=preprocess,
+        capture=_HTML2CANVAS_CAPTURE,
+        format=format,
+        _rebuild=lambda p: html2canvas_strategy(
+            format=format, settle_frames=settle_frames, _params=p
+        ),
+    )
 
 
 def canvas_strategy(format: str = "png") -> CaptureStrategy:

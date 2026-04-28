@@ -171,6 +171,38 @@ class TestCaptureGraph:
         assert isinstance(result, html.Div)
 
 
+class TestCaptureElementWiresParams:
+    """``capture_element`` forwards renderer ``capture_*`` params to the
+    default html2canvas strategy so the live-resize preprocess kicks in."""
+
+    def test_renderer_with_capture_width_triggers_reflow_preprocess(self):
+        # capture_element must hand the renderer signature to
+        # html2canvas_strategy via _params so the preprocess gets emitted.
+        # Mirror of how capture_graph already does it for plotly_strategy.
+        from dash_capture import html2canvas_strategy
+
+        def renderer(_target, _snapshot_img, capture_width: int = 800):
+            _target.write(_snapshot_img())
+
+        s = html2canvas_strategy(
+            _params=__import__("inspect").signature(renderer).parameters
+        )
+        assert s.preprocess is not None
+        assert "opts.width" in s.preprocess
+
+    def test_capture_element_does_not_crash_with_capture_dim_renderer(self):
+        def renderer(
+            _target,
+            _snapshot_img,
+            capture_width: int = 1200,
+            capture_height: int = 800,
+        ):
+            _target.write(_snapshot_img())
+
+        result = capture_element("el-reflow", renderer=renderer)
+        assert isinstance(result, html.Div)
+
+
 # ---------------------------------------------------------------------------
 # Default renderer (passthrough)
 # ---------------------------------------------------------------------------

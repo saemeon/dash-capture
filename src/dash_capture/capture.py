@@ -381,8 +381,6 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
     9. Inject vendored ``html2canvas.min.js`` if the strategy uses it.
     """
     strategy = cfg.strategy
-    if cfg.preprocess is not None:
-        strategy = CaptureStrategy(preprocess=cfg.preprocess, capture=strategy.capture)
 
     # Validate + classify the renderer (cached on fn.__dcap_meta__
     # after the first call, so repeat capture_graph()s are free).
@@ -395,6 +393,18 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
     # ``params`` is still needed by ``wire_wizard`` (it's threaded into
     # ``build_capture_js`` for ``capture_*`` parameter routing).
     params = inspect.signature(cfg.renderer).parameters
+
+    # Auto-wire renderer params into strategies that consume them
+    # (plotly_strategy, html2canvas_strategy, dygraph_strategy). This
+    # lets users write ``capture_element(strategy=dygraph_strategy())``
+    # without manually passing ``_params=...``. The ``_rebuild`` closure
+    # is set by the strategy factory; instances constructed by hand
+    # via ``CaptureStrategy(...)`` skip this path.
+    if strategy._rebuild is not None:
+        strategy = strategy._rebuild(params)
+
+    if cfg.preprocess is not None:
+        strategy = CaptureStrategy(preprocess=cfg.preprocess, capture=strategy.capture)
 
     # Auto-disable the format dropdown for fig-data-only renderers — the
     # selector is meaningless when no image is produced.
@@ -635,7 +645,8 @@ def capture_graph(
     graph_id = graph if isinstance(graph, str) else cast(Any, graph).id
 
     if strategy is None:
-        strategy = plotly_strategy(_params=inspect.signature(renderer).parameters)
+        # _params auto-wired in _make_wizard via strategy._rebuild
+        strategy = plotly_strategy()
 
     return _make_wizard(
         WizardConfig(
@@ -752,6 +763,7 @@ def capture_element(
     comp_id = component if isinstance(component, str) else cast(Any, component).id
 
     if strategy is None:
+        # _params auto-wired in _make_wizard via strategy._rebuild
         strategy = html2canvas_strategy()
 
     return _make_wizard(
