@@ -46,7 +46,7 @@ class CaptureStrategy:
     preprocess: str | None = None
     capture: str = ""
     format: str = "png"
-    _rebuild: Callable[[Mapping], "CaptureStrategy"] | None = field(
+    _rebuild: Callable[[Mapping], CaptureStrategy] | None = field(
         default=None, repr=False, compare=False
     )
 
@@ -196,10 +196,12 @@ def _build_html2canvas_reflow_preprocess(
         x for x, on in [(set_w, has_width), (set_h, has_height)] if on
     )
     return f"""\
-                el._dcap_saved = {{
-                    w: el.style.width,
-                    h: el.style.height
-                }};
+                if (!el._dcap_saved) {{
+                    el._dcap_saved = {{
+                        w: el.style.width,
+                        h: el.style.height
+                    }};
+                }}
                 {set_dims}
                 for (let i = 0; i < {settle_frames}; i++) {{
                     await new Promise(r => requestAnimationFrame(r));
@@ -320,9 +322,7 @@ def html2canvas_strategy(
     has_h = "capture_height" in params
     preprocess: str | None = None
     if has_w or has_h:
-        preprocess = _build_html2canvas_reflow_preprocess(
-            has_w, has_h, settle_frames
-        )
+        preprocess = _build_html2canvas_reflow_preprocess(has_w, has_h, settle_frames)
     return CaptureStrategy(
         preprocess=preprocess,
         capture=_HTML2CANVAS_CAPTURE,

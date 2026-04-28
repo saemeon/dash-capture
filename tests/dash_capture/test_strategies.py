@@ -200,9 +200,7 @@ class TestHtml2canvasStrategy:
         assert "i < 2" in s.preprocess
 
     def test_preprocess_settle_frames_custom(self):
-        s = html2canvas_strategy(
-            settle_frames=5, _params={"capture_width": None}
-        )
+        s = html2canvas_strategy(settle_frames=5, _params={"capture_width": None})
         assert "i < 5" in s.preprocess
 
     def test_preprocess_does_not_set_visibility_hidden(self):
