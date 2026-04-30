@@ -573,7 +573,18 @@ def _register_autogenerate_toggle(generate_id: str, autogenerate_id: str) -> Non
 
 
 def _register_arm_interval(interval_id: str, open_input: Input) -> None:
-    """Arm the capture interval when the wizard opens."""
+    """Arm the capture interval when the wizard opens.
+
+    On open: enable the interval and reset its counter to 0 so it fires
+    once after ``interval`` ms (the auto-preview).
+
+    On close: disable the interval but DO NOT touch ``n_intervals``.
+    Resetting n_intervals=0 on close used to trigger downstream
+    callbacks listening on ``Input(interval_id, "n_intervals")`` —
+    most importantly ``resolve_capture`` — which then ran the entire
+    JS capture chain on close, briefly resizing the live element and
+    flickering the page. ``dash.no_update`` keeps that input quiet.
+    """
 
     @dash.callback(
         Output(interval_id, "disabled"),
@@ -582,7 +593,9 @@ def _register_arm_interval(interval_id: str, open_input: Input) -> None:
         prevent_initial_call=True,
     )
     def arm_interval(is_open):
-        return (not is_open, 0)
+        if is_open:
+            return (False, 0)
+        return (True, dash.no_update)
 
 
 def _register_capture_resolved(
