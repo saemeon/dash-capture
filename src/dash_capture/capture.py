@@ -440,6 +440,8 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
     ]
     if cfg.capture_resolver is not None:
         id_keys.append("resolved")
+        id_keys.append("snapshot_cache")
+        id_keys.append("cache_miss")
     ids = {k: f"_dcap_{k}_{uid}" for k in id_keys}
 
     # Short-circuit: when the renderer has zero user-visible fields and

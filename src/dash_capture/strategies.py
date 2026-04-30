@@ -101,12 +101,12 @@ def _build_plotly_preprocess(patches: list[str], params: Mapping) -> str | None:
         return None
 
     dim_w = (
-        "capture_width != null ? capture_width : graphDiv.offsetWidth"
+        "opts.width != null ? opts.width : graphDiv.offsetWidth"
         if "capture_width" in params
         else "graphDiv.offsetWidth"
     )
     dim_h = (
-        "capture_height != null ? capture_height : graphDiv.offsetHeight"
+        "opts.height != null ? opts.height : graphDiv.offsetHeight"
         if "capture_height" in params
         else "graphDiv.offsetHeight"
     )

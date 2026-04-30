@@ -6,27 +6,31 @@ Then open http://127.0.0.1:8050 and click "Capture at target size".
 
 What this demonstrates
 ----------------------
-``capture_element`` + ``html2canvas_strategy`` now honour
-``capture_width`` / ``capture_height`` on the renderer signature, the
-same way ``plotly_strategy`` already did. Before capture, the strategy:
+Two things at once:
 
-1. Saves the element's inline ``width`` / ``height`` / ``visibility``.
-2. Sets the new dimensions from the wizard form (via
-   ``capture_resolver``).
-3. Awaits a couple of ``requestAnimationFrame`` ticks so any
-   ``ResizeObserver`` listeners or CSS reflow can settle.
-4. Runs ``html2canvas``.
-5. Restores the saved styles in a ``finally`` block.
+1. ``capture_element`` + ``html2canvas_strategy`` honour
+   ``capture_width`` / ``capture_height`` on the renderer signature,
+   the same way ``plotly_strategy`` already did.
 
-The element below is a CSS-flex card layout — reduce the width and the
-cards stack vertically; widen it and they spread out. Pick a few
-sizes from the form and compare the downloaded PNGs.
+2. **Snapshot caching.** The wizard has dimensional fields
+   (``width``/``height``, fed through ``capture_resolver`` to drive the
+   browser-side capture) and a non-dimensional field (``title``,
+   composited onto the PNG server-side). Editing the title should NOT
+   trigger a fresh JS capture — the cache keys on the resolver output,
+   so identical opts reuse the previous snapshot.
+
+   Watch the browser DevTools network tab while toggling fields to
+   see this: width/height changes ⇒ JS capture roundtrip; title
+   changes ⇒ none.
 """
 
 from __future__ import annotations
 
+import io
+
 import dash
 from dash import html
+from PIL import Image, ImageDraw, ImageFont
 
 from dash_capture import capture_element
 
@@ -82,20 +86,32 @@ LAYOUT = html.Div(
 def renderer(
     _target,
     _snapshot_img,
+    title: str = "Q4 Report — Headline KPIs",
     width: int = 1200,
     height: int = 600,
     capture_width: int = 1200,
     capture_height: int = 600,
 ):
-    """Two pairs of fields — wizard-visible vs strategy-visible.
+    """Composite a title bar onto the snapshot.
 
-    ``width`` / ``height`` show up as form fields in the wizard
-    (auto-generated from type hints). ``capture_width`` /
-    ``capture_height`` are the wire-protocol the strategy reads to
-    actually resize the element. The ``capture_resolver`` below maps
-    one to the other so a single set of form values drives both.
+    ``width`` / ``height`` drive the browser-side capture (via
+    ``capture_resolver``) and so are part of the cache key.
+    ``title`` is composited onto the PNG server-side and is NOT in
+    the cache key — editing the title reuses the cached snapshot.
     """
-    _target.write(_snapshot_img())
+    img = Image.open(io.BytesIO(_snapshot_img()))
+    bar_h = 48
+    out = Image.new("RGB", (img.width, img.height + bar_h), "white")
+    out.paste(img, (0, bar_h))
+    draw = ImageDraw.Draw(out)
+    try:
+        font = ImageFont.truetype("Helvetica", 22)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((16, 12), title, fill="black", font=font)
+    buf = io.BytesIO()
+    out.save(buf, format="PNG")
+    _target.write(buf.getvalue())
 
 
 def resolve(width, height, **_):

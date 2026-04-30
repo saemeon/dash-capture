@@ -26,7 +26,9 @@ clientside or server callback each and are assembled by
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -42,6 +44,43 @@ if TYPE_CHECKING:
     # Avoid runtime circular import: capture.py imports wire_wizard from
     # this module, and this module needs WizardConfig only as a type hint.
     from dash_capture.capture import WizardConfig
+
+
+# ---------------------------------------------------------------------------
+# Snapshot cache helpers — memoization by capture options
+# ---------------------------------------------------------------------------
+
+
+def _hash_capture_options(opts: dict) -> str:
+    """Hash capture options dict to create a cache key.
+
+    Used to detect when resolved capture options (capture_width, capture_height,
+    etc) haven't changed, allowing us to reuse the cached snapshot from the
+    browser instead of recapturing.
+
+    Args:
+        opts: dict from capture_resolver (e.g. {"capture_width": 800})
+
+    Returns:
+        40-char hex string (SHA1 hash)
+    """
+    normalized = json.dumps(opts, sort_keys=True, default=str)
+    return hashlib.sha1(normalized.encode()).hexdigest()
+
+
+def _check_snapshot_cache(cache_dict: dict, cache_key: str) -> str | None:
+    """Check if a snapshot is cached for this capture options hash.
+
+    Args:
+        cache_dict: The cache store data (dict mapping hash -> snapshot_b64)
+        cache_key: SHA1 hash of capture options
+
+    Returns:
+        Cached snapshot data (base64 PNG) if present, None otherwise.
+    """
+    if not cache_dict:
+        return None
+    return cache_dict.get(cache_key)
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +308,8 @@ def build_modal_body(
     styles: dict,
     class_names: dict,
     resolved_store_id: str | None = None,
+    snapshot_cache_store_id: str | None = None,
+    cache_miss_store_id: str | None = None,
     show_format: bool = True,
     action_button_ids: list[tuple[str, str]] | None = None,
 ) -> html.Div:
@@ -397,6 +438,8 @@ def build_modal_body(
             ),
             dcc.Store(id=snapshot_store_id),
             *([] if resolved_store_id is None else [dcc.Store(id=resolved_store_id)]),
+            *([] if snapshot_cache_store_id is None else [dcc.Store(id=snapshot_cache_store_id, data={})]),
+            *([] if cache_miss_store_id is None else [dcc.Store(id=cache_miss_store_id)]),
         ],
     )
 
@@ -550,17 +593,32 @@ def _register_capture_resolved(
     config: FnForm,
     resolved_store_id: str,
     snapshot_store_id: str,
+    snapshot_cache_store_id: str,
+    cache_miss_store_id: str,
     generate_id: str,
     interval_id: str,
     autogenerate_id: str,
     format_id: str,
     capture_resolver: Callable,
 ) -> None:
-    """Wire the two-step flow: server resolves capture opts, then JS captures."""
+    """Wire the two-step flow with snapshot caching.
+
+    The resolver computes capture options (capture_width, capture_height, etc)
+    from form fields. We hash these options and check a cache:
+
+    - Cache HIT: reuse old snapshot, skip JS capture (fast!)
+    - Cache MISS: trigger JS capture, store result in cache
+
+    This way, changing non-dimensional fields (title, colors) reuses the
+    cached snapshot instead of recapturing the live graph.
+
+    Cache is cleared when wizard closes (live graph might have been zoomed/panned).
+    """
     _resolve_inputs = [
         Input(s.component_id, s.component_property) for s in config.states
     ]
 
+    # --- Callback 1: Compute capture options ---
     @dash.callback(
         Output(resolved_store_id, "data"),
         Input(generate_id, "n_clicks"),
@@ -571,21 +629,101 @@ def _register_capture_resolved(
         prevent_initial_call=True,
     )
     def resolve_capture(n_clicks, n_intervals, *args):
+        """Compute capture options from form fields via the resolver.
+
+        Args:
+            n_clicks: Generate button clicks
+            n_intervals: Initial capture interval (fires once after wizard opens)
+            *args: field_values... autogen snapshot
+
+        Returns:
+            dict with capture_width, capture_height, etc, or no_update
+        """
         *field_values, autogen, snapshot = args
         is_generate = dash.ctx.triggered_id in (generate_id, interval_id)
+
+        # Only proceed if user clicked Generate/interval fired, or autogen is on
+        # and we have a previous snapshot (autogen on field change)
         if not is_generate and (not autogen or not snapshot):
             return dash.no_update
+
+        # Compute capture options via user's resolver function.
+        # Example: capture_resolver(title="foo", figsize=10) → {"capture_width": 800}
         kwargs = config.build_kwargs(tuple(field_values))
         return capture_resolver(**kwargs)
 
+    # --- Callback 2: Check cache; route to snapshot (hit) or cache_miss (miss) ---
+    # The two outputs are mutually exclusive — exactly one gets written per fire.
+    # This is the lever that makes the cache actually save work: on a hit we
+    # write to snapshot_store (preview re-renders, no JS), and crucially we do
+    # NOT write to cache_miss_store, so the JS clientside callback below stays
+    # idle. On a miss we write capture_opts to cache_miss_store, which triggers
+    # the JS capture exactly once.
+    @dash.callback(
+        Output(snapshot_store_id, "data", allow_duplicate=True),
+        Output(cache_miss_store_id, "data"),
+        Input(resolved_store_id, "data"),
+        State(snapshot_cache_store_id, "data"),
+        prevent_initial_call=True,
+    )
+    def cache_check_and_apply(capture_opts, cache_dict):
+        """Decide hit/miss and route accordingly.
+
+        Returns:
+            (snapshot, miss_payload) — exactly one is `dash.no_update`.
+        """
+        if not capture_opts:
+            return dash.no_update, dash.no_update
+
+        cache_key = _hash_capture_options(capture_opts)
+        cached_snapshot = _check_snapshot_cache(cache_dict or {}, cache_key)
+
+        if cached_snapshot is not None:
+            # Hit: feed cached snapshot straight into snapshot_store; leave
+            # cache_miss_store untouched so the JS callback does not fire.
+            return cached_snapshot, dash.no_update
+
+        # Miss: forward capture_opts to cache_miss_store; the JS callback
+        # listens on it and will run the actual browser-side capture.
+        return dash.no_update, capture_opts
+
+    # --- Callback 3: JS capture, fired only on cache miss ---
+    # Note the Input is cache_miss_store, NOT resolved_store. This is what
+    # makes the cache actually skip the expensive browser-side capture.
     capture_js = build_capture_js(element_id, strategy, [], params, from_resolved=True)
+    # TEMP: log when JS capture actually fires (to diagnose flicker reports).
+    capture_js = capture_js.replace(
+        "async function(resolved_data, fmt) {",
+        "async function(resolved_data, fmt) { "
+        "console.log('[dash-capture] JS CAPTURE FIRING', resolved_data);",
+        1,
+    )
     dash.clientside_callback(
         capture_js,
-        Output(snapshot_store_id, "data"),
-        Input(resolved_store_id, "data"),
+        Output(snapshot_store_id, "data", allow_duplicate=True),
+        Input(cache_miss_store_id, "data"),
         State(format_id, "value"),
         prevent_initial_call=True,
     )
+
+    # --- Callback 4: Cache fresh snapshots ---
+    # `allow_duplicate=True` — clear_cache_on_close (registered later in
+    # wire_wizard) also writes to snapshot_cache_store, so both Outputs
+    # need to declare the duplicate.
+    @dash.callback(
+        Output(snapshot_cache_store_id, "data", allow_duplicate=True),
+        Input(snapshot_store_id, "data"),
+        State(cache_miss_store_id, "data"),
+        State(snapshot_cache_store_id, "data"),
+        prevent_initial_call=True,
+    )
+    def cache_update(snapshot, miss_opts, cache_dict):
+        if not snapshot or not miss_opts:
+            return dash.no_update
+        cache_key = _hash_capture_options(miss_opts)
+        cache_dict = dict(cache_dict or {})
+        cache_dict[cache_key] = snapshot
+        return cache_dict
 
 
 def _register_capture_direct(
@@ -895,6 +1033,8 @@ def wire_wizard(
     snapshot_store_id = ids["snapshot"]
     format_id = ids["format"]
     resolved_store_id = ids.get("resolved")
+    snapshot_cache_store_id = ids.get("snapshot_cache")
+    cache_miss_store_id = ids.get("cache_miss")
 
     action_ids = [
         (f"_dcap_action_{i}_{wizard_id}", action.label)
@@ -941,6 +1081,8 @@ def wire_wizard(
         styles,
         class_names,
         resolved_store_id=resolved_store_id,
+        snapshot_cache_store_id=snapshot_cache_store_id,
+        cache_miss_store_id=cache_miss_store_id,
         show_format=show_format,
         action_button_ids=action_ids,
     )
@@ -966,6 +1108,8 @@ def wire_wizard(
     if has_snapshot:
         if capture_resolver is not None:
             assert resolved_store_id is not None
+            assert snapshot_cache_store_id is not None
+            assert cache_miss_store_id is not None
             _register_capture_resolved(
                 element_id=element_id,
                 strategy=strategy,
@@ -973,6 +1117,8 @@ def wire_wizard(
                 config=config,
                 resolved_store_id=resolved_store_id,
                 snapshot_store_id=snapshot_store_id,
+                snapshot_cache_store_id=snapshot_cache_store_id,
+                cache_miss_store_id=cache_miss_store_id,
                 generate_id=generate_id,
                 interval_id=interval_id,
                 autogenerate_id=autogenerate_id,
@@ -1002,6 +1148,26 @@ def wire_wizard(
             error_id=error_id,
             snapshot_store_id=snapshot_store_id,
         )
+
+        # Clear snapshot cache when wizard closes — only when cache is active
+        # (i.e. capture_resolver is in use). The live graph might have been
+        # zoomed, panned, or otherwise modified while the wizard was open, so
+        # cached snapshots from before the close may no longer match the current
+        # graph state. By clearing on close, we ensure the next capture is fresh.
+        if snapshot_cache_store_id is not None:
+
+            @dash.callback(
+                Output(snapshot_cache_store_id, "data", allow_duplicate=True),
+                wizard.open_input,
+                prevent_initial_call=True,
+            )
+            def clear_cache_on_close(is_open):
+                """Reset snapshot cache to empty dict when wizard closes."""
+                if is_open:
+                    # Wizard is opening: keep any existing cache
+                    return dash.no_update
+                # Wizard is closing: clear the cache
+                return {}
     else:
         _register_preview_from_figdata(
             renderer=renderer,
