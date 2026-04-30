@@ -171,6 +171,139 @@ class TestCaptureGraph:
         assert isinstance(result, html.Div)
 
 
+class TestCaptureResolverPath:
+    """Construction-time guards for the ``capture_resolver`` flow.
+
+    The resolver flow registers four extra callbacks for snapshot caching
+    (resolve → cache_check → JS capture → cache_update) plus a
+    clear-cache-on-close. Multiple of these output to the same
+    ``snapshot_cache`` store, so they need ``allow_duplicate=True`` —
+    forgetting that raises a ``DuplicateCallback`` exception at Dash
+    registration time, before the app ever serves a request.
+
+    These tests do nothing more than instantiate the wizard. If Dash's
+    callback validation fails, the test fails. That's the entire point.
+    """
+
+    def test_capture_element_with_resolver_constructs(self):
+        """Smoke test for the resolver-flow callback wiring.
+
+        Catches duplicate-Output regressions in ``_register_capture_resolved``
+        and ``clear_cache_on_close`` — both target ``snapshot_cache_store``.
+        """
+        import dash
+
+        from dash_capture import capture_element
+
+        # Fresh app per test so callback registration starts clean.
+        dash.Dash(__name__)
+
+        def renderer(
+            _target,
+            _snapshot_img,
+            width: int = 100,
+            capture_width: int = 100,
+        ):
+            _target.write(_snapshot_img())
+
+        def resolve(width, **_):
+            return {"capture_width": width}
+
+        result = capture_element(
+            "el",
+            renderer=renderer,
+            capture_resolver=resolve,
+        )
+        assert isinstance(result, html.Div)
+
+    def test_capture_graph_with_resolver_constructs(self):
+        """Same guard, for the ``capture_graph`` entry point."""
+        import dash
+
+        from dash_capture import capture_graph
+
+        dash.Dash(__name__)
+
+        def renderer(
+            _target,
+            _snapshot_img,
+            width: int = 100,
+            capture_width: int = 100,
+        ):
+            _target.write(_snapshot_img())
+
+        def resolve(width, **_):
+            return {"capture_width": width}
+
+        result = capture_graph(
+            "g-resolver",
+            renderer=renderer,
+            capture_resolver=resolve,
+        )
+        assert isinstance(result, html.Div)
+
+    def test_resolver_js_capture_listens_to_cache_miss_not_resolved(self):
+        """Architectural assertion — encodes WHY the cache works.
+
+        The clientside JS capture must be triggered by the ``cache_miss``
+        store, not ``resolved``. If a refactor accidentally re-points it
+        at ``resolved``, the cache silently degrades: every ``resolved``
+        update would fire the JS and overwrite the cached snapshot, which
+        is exactly the bug this whole architecture exists to prevent.
+
+        We introspect Dash's global callback registry and assert the JS
+        clientside callback whose output is the snapshot store has its
+        Input on ``_dcap_cache_miss_*``.
+        """
+        from dash._callback import GLOBAL_CALLBACK_LIST
+
+        from dash_capture import capture_element
+
+        n_before = len(GLOBAL_CALLBACK_LIST)
+
+        def renderer(
+            _target,
+            _snapshot_img,
+            width: int = 100,
+            capture_width: int = 100,
+        ):
+            _target.write(_snapshot_img())
+
+        def resolve(width, **_):
+            return {"capture_width": width}
+
+        capture_element("el2", renderer=renderer, capture_resolver=resolve)
+        added = GLOBAL_CALLBACK_LIST[n_before:]
+
+        # Find the clientside callback whose output is the snapshot store.
+        # That's the JS capture callback. There's exactly one.
+        snapshot_js_callbacks = [
+            cb
+            for cb in added
+            if cb.get("clientside_function")
+            and "_dcap_snapshot_" in str(cb.get("output", ""))
+            and "_dcap_snapshot_cache_" not in str(cb.get("output", ""))
+        ]
+        assert len(snapshot_js_callbacks) == 1, (
+            f"Expected exactly one clientside JS capture callback writing "
+            f"to the snapshot store, found {len(snapshot_js_callbacks)}."
+        )
+
+        js_cb = snapshot_js_callbacks[0]
+        input_ids = [inp["id"] for inp in js_cb["inputs"]]
+
+        assert any("_dcap_cache_miss_" in i for i in input_ids), (
+            f"JS capture callback must be wired to cache_miss store; "
+            f"found inputs {input_ids!r}. If this is now '_dcap_resolved_*' "
+            f"the cache is broken — the JS capture will fire on every "
+            f"resolver update, including cache hits."
+        )
+        assert not any("_dcap_resolved_" in i for i in input_ids), (
+            f"JS capture callback is wired to resolved store directly. "
+            f"That bypasses the cache. Inputs: {input_ids!r}."
+        )
+
+
 class TestCaptureElementWiresParams:
     """``capture_element`` forwards renderer ``capture_*`` params to the
     default html2canvas strategy so the live-resize preprocess kicks in."""

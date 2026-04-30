@@ -119,11 +119,11 @@ class TestPlotlyStrategy:
 
     def test_capture_width_in_params(self):
         s = plotly_strategy(strip_title=True, _params={"capture_width": None})
-        assert "capture_width" in s.preprocess
+        assert "opts.width" in s.preprocess
 
     def test_no_capture_width(self):
         s = plotly_strategy(strip_title=True, _params={})
-        assert "capture_width" not in s.preprocess
+        assert "opts.width" not in s.preprocess
 
     def test_format_default_png(self):
         s = plotly_strategy()
