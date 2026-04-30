@@ -42,6 +42,22 @@ pip install dash-capture
 
 ::: dash_capture.strategies.canvas_strategy
 
+### multi_canvas_strategy
+
+::: dash_capture.strategies.multi_canvas_strategy
+
+### build_reflow_preprocess
+
+::: dash_capture.strategies.build_reflow_preprocess
+
+### MULTI_CANVAS_CAPTURE_JS
+
+The raw async-IIFE source string used by
+[multi_canvas_strategy](#multi_canvas_strategy). Exposed for chart
+libraries that want to invoke the same JS directly from their own
+component code (e.g. a built-in download button) without going through
+a `CaptureStrategy`. Signature: `(el, fmt, hideSelectors, debug)`.
+
 ### FromPlotly
 
 ::: dash_capture.capture.FromPlotly

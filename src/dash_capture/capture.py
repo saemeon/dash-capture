@@ -466,7 +466,10 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
         )
 
     # Modebar trigger — wire up a bridge button if the user opted into the
-    # Plotly modebar entry-point. Otherwise the trigger flows through as-is.
+    # Plotly modebar entry-point, or if the user passed a custom trigger
+    # implementing the bridge protocol (any object with ``.bridge`` and
+    # ``.open_input`` attributes — e.g. dygraphs' ``DyModebarButton``).
+    # Otherwise the trigger flows through as-is.
     trigger = cfg.trigger
     modebar_bridge = None
     if trigger == "modebar" or isinstance(trigger, ModebarButton | ModebarIcon):
@@ -479,6 +482,12 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
         bridge_id = f"_dcap_modebar_{uid}"
         modebar_bridge = add_modebar_button(cfg.element_id, bridge_id, button=mb)
         trigger = modebar_bridge
+    elif hasattr(trigger, "bridge") and hasattr(trigger, "open_input"):
+        # Bridge protocol: object owns its bridge component AND its open
+        # Input. Used by chart libraries that want to inject a button into
+        # their own modebar without dash-capture knowing about their DOM.
+        modebar_bridge = trigger.bridge
+        trigger = trigger.bridge
 
     wizard_div = wire_wizard(
         cfg=cfg,
@@ -497,7 +506,7 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
     )
 
     if modebar_bridge is not None:
-        wizard_div = html.Div([modebar_bridge, wizard_div])
+        wizard_div = html.Div(cast(list, [modebar_bridge, wizard_div]))
 
     # Inject vendored html2canvas.min.js into the app's index_string when
     # the strategy needs it. Driven by the strategy itself (not by which

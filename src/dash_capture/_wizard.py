@@ -438,8 +438,16 @@ def build_modal_body(
             ),
             dcc.Store(id=snapshot_store_id),
             *([] if resolved_store_id is None else [dcc.Store(id=resolved_store_id)]),
-            *([] if snapshot_cache_store_id is None else [dcc.Store(id=snapshot_cache_store_id, data={})]),
-            *([] if cache_miss_store_id is None else [dcc.Store(id=cache_miss_store_id)]),
+            *(
+                []
+                if snapshot_cache_store_id is None
+                else [dcc.Store(id=snapshot_cache_store_id, data={})]
+            ),
+            *(
+                []
+                if cache_miss_store_id is None
+                else [dcc.Store(id=cache_miss_store_id)]
+            ),
         ],
     )
 

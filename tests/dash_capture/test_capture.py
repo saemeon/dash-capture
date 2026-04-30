@@ -343,7 +343,11 @@ class TestCaptureResolverPath:
 
         # Find cache_check_and_apply by its dual output (snapshot + cache_miss).
         cache_check_key = next(
-            (k for k in added_keys if "_dcap_snapshot_" in k and "_dcap_cache_miss_" in k),
+            (
+                k
+                for k in added_keys
+                if "_dcap_snapshot_" in k and "_dcap_cache_miss_" in k
+            ),
             None,
         )
         assert cache_check_key is not None, (
