@@ -303,6 +303,94 @@ class TestCaptureResolverPath:
             f"That bypasses the cache. Inputs: {input_ids!r}."
         )
 
+    def test_cache_check_clears_cache_miss_on_hit(self):
+        """Regression test for cache poisoning.
+
+        Sequence that used to corrupt the cache:
+          1. Capture at A → cache[A] = snapA, cache_miss = A
+          2. Capture at B → cache[B] = snapB, cache_miss = B
+          3. Switch back to A → HIT.
+
+        At step 3 the hit-callback writes snapA to snapshot_store. If
+        cache_miss is still B (left over from step 2), the cache_update
+        callback that fires on snapshot_store changes would re-store snapA
+        under hash(B) — corrupting the B entry.
+
+        The fix: hit-callback explicitly clears cache_miss to None. This
+        test asserts the second output of cache_check_and_apply is None
+        (not no_update) on a hit.
+        """
+        import dash
+        from dash._callback import GLOBAL_CALLBACK_MAP
+
+        from dash_capture import capture_element
+
+        keys_before = set(GLOBAL_CALLBACK_MAP.keys())
+
+        def renderer(
+            _target,
+            _snapshot_img,
+            width: int = 100,
+            capture_width: int = 100,
+        ):
+            _target.write(_snapshot_img())
+
+        def resolve(width, **_):
+            return {"capture_width": width}
+
+        capture_element("el-poison", renderer=renderer, capture_resolver=resolve)
+        added_keys = set(GLOBAL_CALLBACK_MAP.keys()) - keys_before
+
+        # Find cache_check_and_apply by its dual output (snapshot + cache_miss).
+        cache_check_key = next(
+            (k for k in added_keys if "_dcap_snapshot_" in k and "_dcap_cache_miss_" in k),
+            None,
+        )
+        assert cache_check_key is not None, (
+            "Couldn't locate cache_check_and_apply callback in GLOBAL_CALLBACK_MAP."
+        )
+
+        # `callback` is the Dash-wrapped function (expects outputs_list etc).
+        # `__wrapped__` is the original `cache_check_and_apply` from the
+        # closure inside _register_capture_resolved — that's what we want
+        # to call with raw args.
+        wrapped = GLOBAL_CALLBACK_MAP[cache_check_key]["callback"]
+        fn = wrapped.__wrapped__
+        capture_opts = {"capture_width": 100}
+
+        # ── Cache HIT ────────────────────────────────────────────────
+        # Pre-populate the cache as if a previous capture ran.
+        from dash_capture._wizard import _hash_capture_options
+
+        key = _hash_capture_options(capture_opts)
+        cache_dict = {key: "data:image/png;base64,FAKE_SNAP_A"}
+
+        result = fn(capture_opts, cache_dict)
+        # Expected: (cached_snapshot, None) — the None is the fix. If the
+        # implementation regresses to returning dash.no_update here,
+        # cache_update will re-cache the hit's snapshot under a stale
+        # cache_miss key and poison the cache.
+        assert result[0] == "data:image/png;base64,FAKE_SNAP_A", (
+            "On cache hit, snapshot output should be the cached value."
+        )
+        assert result[1] is None, (
+            f"On cache hit, cache_miss output must be None to clear stale "
+            f"opts from a previous miss. Got {result[1]!r}. If this is "
+            f"dash.no_update, the cache-poisoning bug is back."
+        )
+
+        # ── Cache MISS ───────────────────────────────────────────────
+        # Empty cache; same opts.
+        result = fn(capture_opts, {})
+        assert result[0] is dash.no_update, (
+            "On cache miss, snapshot output should be no_update so the "
+            "JS clientside callback runs and writes the fresh capture."
+        )
+        assert result[1] == capture_opts, (
+            "On cache miss, cache_miss output should be the capture_opts "
+            "to trigger the JS callback."
+        )
+
 
 class TestCaptureElementWiresParams:
     """``capture_element`` forwards renderer ``capture_*`` params to the

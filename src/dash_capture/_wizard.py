@@ -670,7 +670,19 @@ def _register_capture_resolved(
         """Decide hit/miss and route accordingly.
 
         Returns:
-            (snapshot, miss_payload) — exactly one is `dash.no_update`.
+            (snapshot, miss_payload)
+
+            On HIT we write the cached snapshot AND explicitly clear
+            cache_miss_store to ``None``. Clearing matters because
+            cache_update (Callback 4) reads cache_miss_store as State to
+            recover the cache key for the snapshot it sees. If we left
+            stale opts in cache_miss_store from the previous miss, a hit
+            would cause cache_update to file the cached snapshot under
+            the WRONG key — a cache-poisoning bug.
+
+            The clientside JS callback (Callback 3) listens on
+            cache_miss_store but already guards against falsy data, so
+            writing ``None`` triggers it but it bails immediately.
         """
         if not capture_opts:
             return dash.no_update, dash.no_update
@@ -679,9 +691,9 @@ def _register_capture_resolved(
         cached_snapshot = _check_snapshot_cache(cache_dict or {}, cache_key)
 
         if cached_snapshot is not None:
-            # Hit: feed cached snapshot straight into snapshot_store; leave
-            # cache_miss_store untouched so the JS callback does not fire.
-            return cached_snapshot, dash.no_update
+            # Hit: feed cached snapshot to snapshot_store AND clear
+            # cache_miss_store so cache_update doesn't poison the cache.
+            return cached_snapshot, None
 
         # Miss: forward capture_opts to cache_miss_store; the JS callback
         # listens on it and will run the actual browser-side capture.
@@ -691,13 +703,6 @@ def _register_capture_resolved(
     # Note the Input is cache_miss_store, NOT resolved_store. This is what
     # makes the cache actually skip the expensive browser-side capture.
     capture_js = build_capture_js(element_id, strategy, [], params, from_resolved=True)
-    # TEMP: log when JS capture actually fires (to diagnose flicker reports).
-    capture_js = capture_js.replace(
-        "async function(resolved_data, fmt) {",
-        "async function(resolved_data, fmt) { "
-        "console.log('[dash-capture] JS CAPTURE FIRING', resolved_data);",
-        1,
-    )
     dash.clientside_callback(
         capture_js,
         Output(snapshot_store_id, "data", allow_duplicate=True),
