@@ -170,18 +170,22 @@ _CANVAS_CAPTURE = """\
                 return cvs.toDataURL(mime, opts.quality || undefined);"""
 
 
-def _build_html2canvas_reflow_preprocess(
+def build_reflow_preprocess(
     has_width: bool,
     has_height: bool,
-    settle_frames: int,
+    settle_frames: int = 2,
 ) -> str:
     """Build JS preprocess that live-resizes the element to opts.width/height.
+
+    Public helper for custom capture strategies. Used by
+    :func:`html2canvas_strategy` and :func:`multi_canvas_strategy`, and
+    intended for third-party strategies that want the same target-size
+    behaviour without duplicating the JS.
 
     Saves original inline ``width``/``height`` on ``el._dcap_saved`` so
     the capture JS's ``finally`` block can restore them. Settles for
     ``settle_frames`` rAF ticks so ResizeObservers (dygraphs, ECharts,
-    DataTable column-width JS) have time to re-lay-out before
-    html2canvas snapshots.
+    DataTable column-width JS) have time to re-lay-out before capture.
 
     Note: we deliberately do NOT use ``visibility: hidden`` to suppress
     the resize flicker — visibility cascades to descendants and
@@ -189,6 +193,21 @@ def _build_html2canvas_reflow_preprocess(
     drop all the text content from the captured image. A brief flicker
     is acceptable for a deliberate capture click; correct output is not
     optional.
+
+    Parameters
+    ----------
+    has_width, has_height : bool
+        Whether the renderer declared ``capture_width`` /
+        ``capture_height``. Typically computed as
+        ``"capture_width" in (_params or {})`` etc.
+    settle_frames : int, default 2
+        rAF ticks to await between resize and capture.
+
+    Returns
+    -------
+    str
+        JS source fragment, intended to be assigned to
+        ``CaptureStrategy.preprocess``.
     """
     set_w = "if (opts.width != null) el.style.width = opts.width + 'px';"
     set_h = "if (opts.height != null) el.style.height = opts.height + 'px';"
@@ -322,7 +341,7 @@ def html2canvas_strategy(
     has_h = "capture_height" in params
     preprocess: str | None = None
     if has_w or has_h:
-        preprocess = _build_html2canvas_reflow_preprocess(has_w, has_h, settle_frames)
+        preprocess = build_reflow_preprocess(has_w, has_h, settle_frames)
     return CaptureStrategy(
         preprocess=preprocess,
         capture=_HTML2CANVAS_CAPTURE,
@@ -346,6 +365,237 @@ def canvas_strategy(format: str = "png") -> CaptureStrategy:
     CaptureStrategy
     """
     return CaptureStrategy(capture=_CANVAS_CAPTURE, format=format)
+
+
+# ---------------------------------------------------------------------------
+# Multi-canvas strategy — for charts that render to several stacked <canvas>
+# ---------------------------------------------------------------------------
+#
+# Self-contained async IIFE. Takes ``(el, fmt, hideSelectors, debug)`` and
+# returns a Promise<data-URI>. Designed for chart libraries (dygraphs,
+# custom canvas widgets) that draw onto multiple stacked canvases rather
+# than a single output canvas.
+#
+# Behaviour:
+#   1. For each CSS selector in ``hideSelectors``, hide the matching
+#      elements before capture (saved + restored after) so things like
+#      range-selectors or in-chart UI don't appear in the export.
+#   2. Allocate a destination canvas at offset(W,H) * devicePixelRatio
+#      and scale the 2D context by DPR — output is sharp on retina.
+#   3. For each visible source canvas under ``el``, blit it via the
+#      9-arg drawImage, mapping its full backing buffer (cv.width ×
+#      cv.height) into its CSS-pixel rect.
+#   4. Rasterise the HTML overlay layer (titles, labels, legends,
+#      annotations) via ``window.html2canvas`` at the same DPR and
+#      composite it on top. ``ignoreElements`` skips ``<canvas>`` so we
+#      don't double-paint them at html2canvas's lower fidelity. If
+#      html2canvas isn't loaded the overlay step silently no-ops;
+#      ``multi_canvas_strategy`` always queues the asset, so this only
+#      happens for unusual setups (e.g. invoking the JS directly from
+#      a host component's modebar before any strategy was constructed).
+#   5. Restore any hidden elements.
+#   6. Resolve with the data-URI.
+#
+# When ``debug`` is true, the IIFE logs dpr/dimensions/per-canvas rects
+# and outlines each blit destination with a 1px red border.
+MULTI_CANVAS_CAPTURE_JS = """\
+(async function (el, fmt, hideSelectors, debug) {
+    if (hideSelectors && hideSelectors.length) {
+        el._dcap_hidden = [];
+        hideSelectors.forEach(function (sel) {
+            el.querySelectorAll(sel).forEach(function (item) {
+                el._dcap_hidden.push({el: item, display: item.style.display});
+                item.style.display = 'none';
+            });
+        });
+    }
+    var dpr = window.devicePixelRatio || 1;
+    var canvases = el.querySelectorAll('canvas');
+    var cssW = el.offsetWidth;
+    var cssH = el.offsetHeight;
+    var out = document.createElement('canvas');
+    out.width = Math.round(cssW * dpr);
+    out.height = Math.round(cssH * dpr);
+    var ctx = out.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, cssW, cssH);
+    var pr = el.getBoundingClientRect();
+    if (debug) {
+        console.group('[dash-capture multi-canvas] debug');
+        console.log('target el:', el.id || el.tagName, el);
+        console.log('devicePixelRatio:', dpr);
+        console.log('el.offsetWidth/Height (CSS):', cssW, 'x', cssH);
+        console.log('el.getBoundingClientRect():', pr);
+        console.log('output canvas (device px):', out.width, 'x', out.height);
+        console.log('found', canvases.length, 'canvas elements');
+    }
+    var drawn = 0;
+    canvases.forEach(function (cv, i) {
+        var skip = (cv.style.display === 'none' || cv.offsetParent === null);
+        var r = cv.getBoundingClientRect();
+        if (debug) {
+            console.log(
+                '  canvas[' + i + '] backing=' + cv.width + 'x' + cv.height +
+                ' rect=' + Math.round(r.width) + 'x' + Math.round(r.height) +
+                ' @ (' + Math.round(r.left - pr.left) + ',' +
+                Math.round(r.top - pr.top) + ')' +
+                (skip ? ' SKIPPED' : ''),
+                cv
+            );
+        }
+        if (skip) return;
+        ctx.drawImage(
+            cv,
+            0, 0, cv.width, cv.height,
+            r.left - pr.left, r.top - pr.top, r.width, r.height
+        );
+        if (debug) {
+            ctx.save();
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(
+                r.left - pr.left + 0.5, r.top - pr.top + 0.5,
+                r.width - 1, r.height - 1
+            );
+            ctx.restore();
+        }
+        drawn++;
+    });
+    if (debug) {
+        console.log('drew', drawn, 'canvases onto output');
+    }
+    if (window.html2canvas) {
+        try {
+            var overlay = await window.html2canvas(el, {
+                backgroundColor: null,
+                scale: dpr,
+                useCORS: true,
+                logging: !!debug,
+                ignoreElements: function (n) {
+                    return n.tagName === 'CANVAS';
+                }
+            });
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.drawImage(overlay, 0, 0);
+            ctx.restore();
+            if (debug) {
+                console.log(
+                    'html2canvas overlay (device px):',
+                    overlay.width, 'x', overlay.height
+                );
+            }
+        } catch (e) {
+            if (debug) console.warn('html2canvas overlay failed:', e);
+        }
+    } else if (debug) {
+        console.warn(
+            '[dash-capture multi-canvas] html2canvas not loaded; ' +
+            'skipping HTML overlay (titles / labels / legends).'
+        );
+    }
+    if (debug) console.groupEnd();
+    if (el._dcap_hidden) {
+        el._dcap_hidden.forEach(function (h) {
+            h.el.style.display = h.display;
+        });
+        delete el._dcap_hidden;
+    }
+    return out.toDataURL('image/' + fmt);
+})"""
+
+
+def multi_canvas_strategy(
+    *,
+    hide_selectors: list[str] | None = None,
+    format: str = "png",
+    debug: bool = False,
+    settle_frames: int = 2,
+    _params: Mapping | None = None,
+) -> CaptureStrategy:
+    """Strategy that composites every visible ``<canvas>`` under the target.
+
+    Designed for chart libraries (dygraphs, custom canvas widgets) where
+    the chart renders to several stacked canvases — plot, axes, range
+    selector — and the built-in :func:`canvas_strategy` (which captures
+    only the first canvas) can't reproduce the full output. This strategy
+    walks every visible canvas, blits each at its CSS-pixel rect onto a
+    single white-backed canvas at devicePixelRatio scale, then overlays
+    the HTML layer (titles, axis labels, legends, annotations) via
+    ``html2canvas``.
+
+    The capture JS is :data:`MULTI_CANVAS_CAPTURE_JS`. Call sites that
+    invoke the JS directly (e.g. a host component's own download button)
+    can import the constant and pass ``hideSelectors`` at call time.
+
+    Parameters
+    ----------
+    hide_selectors :
+        CSS selectors for elements to temporarily hide before capture
+        (e.g. ``[".dygraph-rangesel-fgcanvas", ...]`` for dygraphs'
+        range selector). Restored to their original ``display`` value
+        after capture. ``None`` = hide nothing.
+    format :
+        Output image format. ``"png"``, ``"jpeg"``, ``"webp"``. SVG is
+        not supported (canvases only emit raster).
+    debug :
+        Console-log dimensions and per-canvas blits; outline destination
+        rects in red on the output.
+    settle_frames :
+        rAF ticks to await between live-resize and capture, when the
+        renderer declares ``capture_width`` / ``capture_height``.
+    _params :
+        Renderer signature for capture_width / capture_height auto-wire,
+        mirroring :func:`html2canvas_strategy`. Passed by ``capture_element``
+        when wiring the strategy.
+
+    Returns
+    -------
+    CaptureStrategy
+    """
+    # Queue html2canvas — needed for the overlay pass.
+    from dash_capture._html2canvas import ensure_html2canvas
+
+    ensure_html2canvas([])
+
+    params = _params or {}
+    has_w = "capture_width" in params
+    has_h = "capture_height" in params
+    preprocess: str | None = None
+    if has_w or has_h:
+        preprocess = build_reflow_preprocess(has_w, has_h, settle_frames)
+
+    # JSON-serialise the selector list for inlining into the JS.
+    import json
+
+    selectors_js = json.dumps(list(hide_selectors or []))
+    debug_js = "true" if debug else "false"
+
+    # Wrap the IIFE call in try/finally so the live-resize preprocess can
+    # be cleaned up safely (the finally block is a no-op when no preprocess
+    # ran — el._dcap_saved is undefined).
+    capture = (
+        f"try {{ return await {MULTI_CANVAS_CAPTURE_JS}"
+        f"(el, '{format}', {selectors_js}, {debug_js}); }} "
+        "finally { if (el._dcap_saved) { "
+        "el.style.width = el._dcap_saved.w; "
+        "el.style.height = el._dcap_saved.h; "
+        "delete el._dcap_saved; } }"
+    )
+
+    return CaptureStrategy(
+        preprocess=preprocess,
+        capture=capture,
+        format=format,
+        _rebuild=lambda p: multi_canvas_strategy(
+            hide_selectors=hide_selectors,
+            format=format,
+            debug=debug,
+            settle_frames=settle_frames,
+            _params=p,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

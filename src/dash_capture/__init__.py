@@ -23,7 +23,10 @@ Public API:
 * :func:`capture_element` — wizard for any DOM element (html2canvas)
 * :func:`capture_binding` — low-level JS-capture → ``dcc.Store`` binding
 * :class:`CaptureStrategy`, :func:`plotly_strategy`,
-  :func:`html2canvas_strategy`, :func:`canvas_strategy` — capture strategies
+  :func:`html2canvas_strategy`, :func:`canvas_strategy`,
+  :func:`multi_canvas_strategy` — capture strategies
+* :func:`build_reflow_preprocess`, :data:`MULTI_CANVAS_CAPTURE_JS` —
+  building blocks for custom strategies
 * :class:`ModebarButton`, :class:`ModebarIcon`,
   :func:`add_modebar_button` — Plotly modebar trigger helpers
 * :class:`FromPlotly` — pre-populate form fields from the live figure
@@ -54,9 +57,12 @@ from dash_capture.capture import (
     capture_graph,
 )
 from dash_capture.strategies import (
+    MULTI_CANVAS_CAPTURE_JS,
     CaptureStrategy,
+    build_reflow_preprocess,
     canvas_strategy,
     html2canvas_strategy,
+    multi_canvas_strategy,
     plotly_strategy,
 )
 
@@ -72,6 +78,10 @@ __all__ = [
     "plotly_strategy",
     "html2canvas_strategy",
     "canvas_strategy",
+    "multi_canvas_strategy",
+    # building blocks for custom strategies
+    "build_reflow_preprocess",
+    "MULTI_CANVAS_CAPTURE_JS",
     # modebar
     "add_modebar_button",
     "ModebarButton",
