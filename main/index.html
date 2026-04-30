@@ -439,6 +439,39 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#multi_canvas_strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        multi_canvas_strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build_reflow_preprocess" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_reflow_preprocess
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi_canvas_capture_js" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MULTI_CANVAS_CAPTURE_JS
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fromplotly" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -593,6 +626,39 @@
     <span class="md-ellipsis">
       
         canvas_strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi_canvas_strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        multi_canvas_strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build_reflow_preprocess" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_reflow_preprocess
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multi_canvas_capture_js" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MULTI_CANVAS_CAPTURE_JS
       
     </span>
   </a>
@@ -2121,7 +2187,305 @@ resize handlers.</p>
 
     </div>
 
-</div><h3 id="fromplotly">FromPlotly<a class="headerlink" href="#fromplotly" title="Permanent link">&para;</a></h3>
+</div><h3 id="multi_canvas_strategy">multi_canvas_strategy<a class="headerlink" href="#multi_canvas_strategy" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Strategy that composites every visible <code>&lt;canvas&gt;</code> under the target.</p>
+<p>Designed for chart libraries (dygraphs, custom canvas widgets) where
+the chart renders to several stacked canvases — plot, axes, range
+selector — and the built-in :func:<code>canvas_strategy</code> (which captures
+only the first canvas) can't reproduce the full output. This strategy
+walks every visible canvas, blits each at its CSS-pixel rect onto a
+single white-backed canvas at devicePixelRatio scale, then overlays
+the HTML layer (titles, axis labels, legends, annotations) via
+<code>html2canvas</code>.</p>
+<p>The capture JS is :data:<code>MULTI_CANVAS_CAPTURE_JS</code>. Call sites that
+invoke the JS directly (e.g. a host component's own download button)
+can import the constant and pass <code>hideSelectors</code> at call time.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>hide_selectors</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>CSS selectors for elements to temporarily hide before capture
+(e.g. <code>[".dygraph-rangesel-fgcanvas", ...]</code> for dygraphs'
+range selector). Restored to their original <code>display</code> value
+after capture. <code>None</code> = hide nothing.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="list">list</span>[<span title="str">str</span>] | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>format</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Output image format. <code>"png"</code>, <code>"jpeg"</code>, <code>"webp"</code>. SVG is
+not supported (canvases only emit raster).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;png&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>debug</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Console-log dimensions and per-canvas blits; outline destination
+rects in red on the output.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>False</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>settle_frames</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>rAF ticks to await between live-resize and capture, when the
+renderer declares <code>capture_width</code> / <code>capture_height</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>2</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>_params</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Renderer signature for capture_width / capture_height auto-wire,
+mirroring :func:<code>html2canvas_strategy</code>. Passed by <code>capture_element</code>
+when wiring the strategy.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="collections.abc.Mapping">Mapping</span> | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="dash_capture.strategies.CaptureStrategy">CaptureStrategy</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div><h3 id="build_reflow_preprocess">build_reflow_preprocess<a class="headerlink" href="#build_reflow_preprocess" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Build JS preprocess that live-resizes the element to opts.width/height.</p>
+<p>Public helper for custom capture strategies. Used by
+:func:<code>html2canvas_strategy</code> and :func:<code>multi_canvas_strategy</code>, and
+intended for third-party strategies that want the same target-size
+behaviour without duplicating the JS.</p>
+<p>Saves original inline <code>width</code>/<code>height</code> on <code>el._dcap_saved</code> so
+the capture JS's <code>finally</code> block can restore them. Settles for
+<code>settle_frames</code> rAF ticks so ResizeObservers (dygraphs, ECharts,
+DataTable column-width JS) have time to re-lay-out before capture.</p>
+<p>Note: we deliberately do NOT use <code>visibility: hidden</code> to suppress
+the resize flicker — visibility cascades to descendants and
+html2canvas skips <code>visibility: hidden</code> elements, which would
+drop all the text content from the captured image. A brief flicker
+is acceptable for a deliberate capture click; correct output is not
+optional.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>has_width</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether the renderer declared <code>capture_width</code> /
+<code>capture_height</code>. Typically computed as
+<code>"capture_width" in (_params or {})</code> etc.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>has_height</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Whether the renderer declared <code>capture_width</code> /
+<code>capture_height</code>. Typically computed as
+<code>"capture_width" in (_params or {})</code> etc.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>settle_frames</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>rAF ticks to await between resize and capture.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>2</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="str">str</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>JS source fragment, intended to be assigned to
+<code>CaptureStrategy.preprocess</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div><h3 id="multi_canvas_capture_js">MULTI_CANVAS_CAPTURE_JS<a class="headerlink" href="#multi_canvas_capture_js" title="Permanent link">&para;</a></h3>
+<p>The raw async-IIFE source string used by
+<a href="#multi_canvas_strategy">multi_canvas_strategy</a>. Exposed for chart
+libraries that want to invoke the same JS directly from their own
+component code (e.g. a built-in download button) without going through
+a <code>CaptureStrategy</code>. Signature: <code>(el, fmt, hideSelectors, debug)</code>.</p>
+<h3 id="fromplotly">FromPlotly<a class="headerlink" href="#fromplotly" title="Permanent link">&para;</a></h3>
 
 
 <div class="doc doc-object doc-class">
