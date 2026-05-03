@@ -59,6 +59,23 @@ to keep breakages out of patch releases).
   woke up the entire capture chain — visible as a flicker on the live
   element every time the wizard closed. Now ``n_intervals`` is reset
   only on open.
+- **Re-opening the wizard no longer fires a double capture.** On every
+  re-open, ``arm_interval`` previously reset ``n_intervals`` from N
+  back to 0, which was an Input change that fired downstream callbacks
+  *before* the interval ticked. The interval then ticked 0→1 and fired
+  them again — two captures per re-open. The fix bumps ``max_intervals``
+  to ``n_intervals + 1`` instead, so the next tick advances N→N+1 and
+  fires the capture chain exactly once. ``n_intervals`` is now never
+  written by ``arm_interval``.
+- **``capture_*`` params with no spec now fall back to current size.**
+  Declaring ``capture_width: int`` (or ``capture_height``, ``capture_scale``)
+  on a renderer without a corresponding ``field_specs`` entry and without
+  a ``capture_resolver`` used to raise ``ID not found in layout`` at first
+  wizard open — the JS tried to read the value as ``State`` from a form
+  field that FnForm had excluded from rendering. The direct flow now
+  treats the no-spec case as "use the element's current browser size",
+  matching the friendly default that already worked for ``plotly_strategy``
+  with omitted dimensions.
 
 ### Tests
 
@@ -72,6 +89,31 @@ to keep breakages out of patch releases).
   (``test_capture_resolver_cache_skips_js_on_non_dimensional_change``)
   that wraps ``html2canvas`` with a counter and asserts non-dimensional
   field changes don't increment it.
+- Added ``TestRegisterArmInterval`` (5 tests) and
+  ``TestRegisterCaptureDirectCaptureSpec`` /
+  ``TestBuildCaptureJsOpts`` (6 tests) in ``tests/dash_capture/test_wizard.py``
+  pinning the wiring side of the two new fixes — bump-``max_intervals``
+  semantics, and the three-case (fixed / Field / no spec) handling of
+  ``capture_*`` params.
+- Added ``tests/integration/test_regression_fixes.py`` (9 selenium
+  tests) covering: re-open fires capture exactly once, ``capture_*``
+  no-spec opens cleanly, close triggers no capture, output is a valid
+  PNG with dimensions matching ``capture_width``/``capture_height``,
+  basic flows produce no severe console errors, manual Generate after
+  auto-fire produces exactly two captures total, and two wizards on
+  one page do not cross-fire. ``Plotly.toImage`` is wrapped with a
+  per-element counter for the cross-fire / re-open / Generate tests
+  — the only reliable signal for "capture actually ran" given the
+  guard inside ``build_capture_js`` short-circuits some invocations
+  silently.
+- Fixed two pre-existing modebar selenium tests that were timing out
+  because of brittle assertions: ``test_modebar_button_with_text_label``
+  read ``btn.text`` (which is empty for ``opacity: 0`` modebar buttons)
+  and now reads ``btn.get_attribute("textContent")``;
+  ``test_capture_graph_modebar_trigger`` waited for the Generate
+  button's text to appear, but Generate is hidden when the renderer
+  has no fields — replaced with a direct check for the wizard
+  modal's ``display: block`` style.
 
 ### Internal
 

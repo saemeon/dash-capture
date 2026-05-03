@@ -128,6 +128,33 @@ binding = capture_binding(
 
 `plotly_strategy()` accepts strip flags (`strip_title`, `strip_legend`, `strip_annotations`, `strip_axis_titles`, `strip_colorbar`, `strip_margin`) and `format`. For per-export width / height / scale, declare `capture_width: int` / `capture_height: int` / `capture_scale: float` parameters on your renderer — they get plumbed into `Plotly.toImage()` automatically.
 
+### `capture_*` parameter resolution
+
+The same `capture_width` / `capture_height` / `capture_scale` magic params work with any strategy that consumes them (`plotly_strategy`, `html2canvas_strategy`, `dygraph_strategy`, …). Three ways to provide values:
+
+| How | Where the value comes from | Use case |
+|----|----|----|
+| **Omit** (no `field_specs`, no `capture_resolver`) | The element's current size in the browser | Fast, sensible default — works without any config. |
+| **`fixed(value)`** in `field_specs` | Inlined as a JS constant | Pin a specific export size at import time. |
+| **`capture_resolver=fn`** | Computed server-side from form fields | Drive sizes from user input, with snapshot caching keyed by the resolved options. |
+
+```python
+from dash_fn_form import fixed
+from dash_capture import capture_graph
+
+# (1) Omit — capture at the live element's current size:
+capture_graph(graph, renderer=my_renderer)
+
+# (2) fixed — pin an export size:
+capture_graph(graph, renderer=my_renderer,
+              field_specs={"capture_width": fixed(1200), "capture_height": fixed(600)})
+
+# (3) capture_resolver — drive from form fields:
+capture_graph(graph, renderer=my_renderer,
+              capture_resolver=lambda width, height, **_:
+                  {"capture_width": width, "capture_height": height})
+```
+
 ## Pre-filling fields from the live figure
 
 `FromPlotly` reads a value from the running Plotly figure to pre-populate auto-generated form fields:

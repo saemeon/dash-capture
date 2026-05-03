@@ -13,6 +13,8 @@ Run locally with:
 from __future__ import annotations
 
 import base64
+import os
+import tempfile
 import time
 
 import dash
@@ -29,7 +31,7 @@ def _make_figure():
     """Create a simple Plotly figure for testing."""
     return go.Figure(
         data=go.Scatter(x=[1, 2, 3], y=[4, 5, 6], mode="markers"),
-        layout=dict(title="Test Chart", width=400, height=300),
+        layout={"title": "Test Chart", "width": 400, "height": 300},
     )
 
 
@@ -139,7 +141,9 @@ def test_capture_with_explicit_strategy(dash_duo):
 
     app = dash.Dash(__name__)
     exporter = capture_graph(
-        graph, renderer=passthrough, trigger="Export",
+        graph,
+        renderer=passthrough,
+        trigger="Export",
         strategy=plotly_strategy(strip_legend=True),
     )
     app.layout = html.Div([graph, exporter])
@@ -225,9 +229,7 @@ def test_capture_element_html2canvas_loaded(dash_duo):
         _target.write(_snapshot_img())
 
     app = dash.Dash(__name__)
-    exporter = capture_element(
-        "t5-table", renderer=passthrough, trigger="Capture"
-    )
+    exporter = capture_element("t5-table", renderer=passthrough, trigger="Capture")
     app.layout = html.Div([table, exporter])
 
     dash_duo.start_server(app)
@@ -283,9 +285,7 @@ def test_capture_element_no_fmt_collision_in_generated_js(dash_duo):
         _target.write(_snapshot_img())
 
     app = dash.Dash(__name__)
-    exporter = capture_element(
-        "t5-table", renderer=passthrough, trigger="Capture"
-    )
+    exporter = capture_element("t5-table", renderer=passthrough, trigger="Capture")
     app.layout = html.Div([table, exporter])
 
     dash_duo.start_server(app)
@@ -295,8 +295,7 @@ def test_capture_element_no_fmt_collision_in_generated_js(dash_duo):
     # Inspect browser console for SyntaxErrors before any user action
     logs = dash_duo.driver.get_log("browser")
     syntax_errors = [
-        e for e in logs
-        if e["level"] == "SEVERE" and "SyntaxError" in e["message"]
+        e for e in logs if e["level"] == "SEVERE" and "SyntaxError" in e["message"]
     ]
     assert not syntax_errors, (
         "Generated clientside JS has a SyntaxError on page load:\n"
@@ -316,10 +315,6 @@ def test_capture_element_no_fmt_collision_in_generated_js(dash_duo):
 #      rather than app.index_string mutation
 
 
-import os
-import tempfile
-
-
 def _configure_downloads(dash_duo):
     """Point Chrome's download handler at a temp dir and return its path."""
     dl_dir = tempfile.mkdtemp(prefix="dcap_dl_")
@@ -334,10 +329,7 @@ def _wait_for_download(dl_dir, timeout=20):
     """Return the first downloaded file's name (ignores .crdownload partials)."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        names = [
-            n for n in os.listdir(dl_dir)
-            if not n.endswith(".crdownload")
-        ]
+        names = [n for n in os.listdir(dl_dir) if not n.endswith(".crdownload")]
         if names:
             return names[0]
         time.sleep(0.2)
@@ -373,9 +365,7 @@ def test_filename_callable_uses_form_field(dash_duo):
     _wait_for_png(dash_duo, timeout=45)
 
     # Change the title input — this is the value the filename lambda will see
-    title_input = dash_duo.driver.find_element(
-        By.CSS_SELECTOR, "input[type='text']"
-    )
+    title_input = dash_duo.driver.find_element(By.CSS_SELECTOR, "input[type='text']")
     title_input.clear()
     title_input.send_keys("quarterly-report")
     time.sleep(0.5)  # debounce — autogenerate fires again
@@ -483,8 +473,8 @@ def test_capture_element_target_size_resizes_output(dash_duo):
     # that's clearly not just a DPI scale (which would only multiply
     # the bitmap, not change the source dimensions). The output canvas
     # at scale=2 should be 1600×800 device pixels.
-    NATIVE_W, NATIVE_H = 400, 200
-    TARGET_W, TARGET_H = 800, 400
+    NATIVE_W, NATIVE_H = 400, 200  # noqa: N806
+    TARGET_W, TARGET_H = 800, 400  # noqa: N806
 
     layout = html.Div(
         id="t-target-size",
@@ -576,9 +566,7 @@ def test_capture_element_target_size_resizes_output(dash_duo):
         f"live element width is {live_w}, expected {NATIVE_W} — "
         "the finally block didn't restore inline styles."
     )
-    assert live_h == NATIVE_H, (
-        f"live element height is {live_h}, expected {NATIVE_H}."
-    )
+    assert live_h == NATIVE_H, f"live element height is {live_h}, expected {NATIVE_H}."
 
 
 def test_capture_resolver_cache_skips_js_on_non_dimensional_change(dash_duo):
@@ -608,7 +596,7 @@ def test_capture_resolver_cache_skips_js_on_non_dimensional_change(dash_duo):
     Without this test, the cache could silently degrade to "still calls
     JS but results never used" and the only symptom would be slowness.
     """
-    NATIVE_W, NATIVE_H = 400, 200
+    NATIVE_W, NATIVE_H = 400, 200  # noqa: N806
 
     layout = html.Div(
         id="t-cache-elem",
@@ -680,9 +668,7 @@ def test_capture_resolver_cache_skips_js_on_non_dimensional_change(dash_duo):
     )
 
     # Change the title — this is non-dimensional and should hit the cache.
-    title_input = dash_duo.driver.find_element(
-        By.CSS_SELECTOR, "input[type='text']"
-    )
+    title_input = dash_duo.driver.find_element(By.CSS_SELECTOR, "input[type='text']")
     title_input.clear()
     title_input.send_keys("changed title")
     # Allow autogenerate debounce + callback chain time to settle.

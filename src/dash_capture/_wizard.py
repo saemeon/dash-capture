@@ -583,26 +583,35 @@ def _register_autogenerate_toggle(generate_id: str, autogenerate_id: str) -> Non
 def _register_arm_interval(interval_id: str, open_input: Input) -> None:
     """Arm the capture interval when the wizard opens.
 
-    On open: enable the interval and reset its counter to 0 so it fires
-    once after ``interval`` ms (the auto-preview).
+    On open: enable the interval and bump ``max_intervals`` by one so it
+    fires once more after ``interval`` ms (the auto-preview). We bump
+    ``max_intervals`` rather than resetting ``n_intervals`` to 0 because
+    a 1→0 reset is an Input change on ``n_intervals`` and would fire the
+    downstream capture callback immediately — *before* the interval ticks
+    — producing a double-capture on re-open. Bumping ``max_intervals``
+    instead leaves ``n_intervals`` alone; the next interval tick advances
+    it from N to N+1, which fires the capture chain exactly once.
 
-    On close: disable the interval but DO NOT touch ``n_intervals``.
-    Resetting n_intervals=0 on close used to trigger downstream
-    callbacks listening on ``Input(interval_id, "n_intervals")`` —
-    most importantly ``resolve_capture`` — which then ran the entire
-    JS capture chain on close, briefly resizing the live element and
-    flickering the page. ``dash.no_update`` keeps that input quiet.
+    On close: disable the interval and leave ``n_intervals`` /
+    ``max_intervals`` alone. Resetting either on close used to trigger
+    downstream callbacks (``resolve_capture`` etc.), running the JS
+    capture chain on close — briefly resizing the live element and
+    flickering the page. ``dash.no_update`` keeps both inputs quiet.
     """
 
     @dash.callback(
         Output(interval_id, "disabled"),
-        Output(interval_id, "n_intervals"),
+        Output(interval_id, "max_intervals"),
         open_input,
+        State(interval_id, "n_intervals"),
         prevent_initial_call=True,
     )
-    def arm_interval(is_open):
+    def arm_interval(is_open, current_n):
         if is_open:
-            return (False, 0)
+            # Allow exactly one more tick: the interval will advance
+            # n_intervals from current_n to current_n + 1, fire the
+            # downstream capture callback once, then auto-stop.
+            return (False, (current_n or 0) + 1)
         return (True, dash.no_update)
 
 
@@ -765,15 +774,29 @@ def _register_capture_direct(
     interval_id: str,
     format_id: str,
 ) -> None:
-    """Wire the direct flow: JS reads capture params from form State."""
+    """Wire the direct flow: JS reads capture params from form State.
+
+    Three cases for each capture_* param:
+    - ``fixed(value)`` spec  → inlined as a JS constant, no form field needed.
+    - Other field spec       → a real form field was rendered; read via State.
+    - No spec                → skip entirely; strategy captures at the
+                               element's current browser size.
+    """
     fixed_capture: dict[str, Any] = {}
     dynamic_capture: list[str] = []
     for name in active_capture:
         spec = (field_specs or {}).get(name)
         if isinstance(spec, _FieldFixed):
             fixed_capture[name] = spec.value
-        else:
+        elif spec is not None:
+            # User asked for a real form field — FnForm rendered it,
+            # so reading via State will resolve to a real component.
             dynamic_capture.append(name)
+        # else: no spec → skip. capture_* params are in the FnForm
+        # `_exclude` list (see capture.py: build_wizard), so without a
+        # spec there is no rendered form field to read from. Omitting
+        # the param from `opts` makes the strategy fall back to the
+        # element's current browser size — the friendly default.
 
     _capture_states = [
         State(field_id(config_id, name), "value") for name in dynamic_capture
