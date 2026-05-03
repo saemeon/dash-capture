@@ -205,6 +205,21 @@ armed on wizard-open (see `_register_arm_interval`). It fires once, 500ms
 after the wizard opens, which auto-generates the initial preview capture.
 This is why the first preview appears on its own without clicking Generate.
 
+**Re-open arming is via `max_intervals` bump, not `n_intervals` reset.**
+The obvious-looking implementation — reset `n_intervals` to 0 on each
+open — is wrong: it produces a 1→0 Input change that fires every
+callback listening on `Input(interval_id, "n_intervals")` (the JS
+capture chain in `_register_capture_direct`, the resolver chain in
+`_register_capture_resolved`) *before* the interval ticks, then the
+interval ticks 0→1 and fires them again — two captures per re-open.
+Instead, `arm_interval` writes `max_intervals = n_intervals + 1` on
+open, leaving `n_intervals` untouched. The next interval tick advances
+N→N+1 and fires the chain exactly once. On close it returns
+`dash.no_update` for both Outputs so the disabled→True transition
+stays silent for downstream callbacks. Pinned by
+`TestRegisterArmInterval` (unit) + the `test_regression_fixes.py` A1/A3
+selenium pair.
+
 Note: [_register_autogenerate_preview](src/dash_capture/_wizard_callbacks.py#L256-L298)
 has no try/except around the renderer call, unlike its
 `_register_preview_from_snapshot` and `_register_preview_from_figdata`
