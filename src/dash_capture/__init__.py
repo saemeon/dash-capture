@@ -47,11 +47,11 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
-from dash_capture._hover_toolbar import hover_toolbar
 from dash_capture._icons import SvgIcon, icon_button
 from dash_capture._modebar import add_modebar_button
 from dash_capture._trigger import CaptureButton
 from dash_capture._with_capture import with_capture
+from dash_capture._with_hover_toolbar import with_hover_toolbar
 
 # Backward-compat aliases
 ModebarIcon = SvgIcon
@@ -94,7 +94,7 @@ __all__ = [
     "SvgIcon",
     "icon_button",
     # hover toolbar + instance-based capture
-    "hover_toolbar",
+    "with_hover_toolbar",
     "with_capture",
     # modebar
     "add_modebar_button",

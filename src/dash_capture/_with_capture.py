@@ -3,7 +3,7 @@
 
 """Instance-based capture entry point: :func:`with_capture`.
 
-Combines :func:`hover_toolbar`, :func:`icon_button`, and
+Combines :func:`with_hover_toolbar`, :func:`icon_button`, and
 :func:`capture_graph` / :func:`capture_element` into a single call that
 returns a callback-transparent wrapper containing the element, toolbar,
 and wizard. The user places one object in the layout.
@@ -16,9 +16,9 @@ from typing import Any, TypeVar
 from dash import dcc
 from dash.development.base_component import Component
 
-from dash_capture._hover_toolbar import hover_toolbar
 from dash_capture._icons import SvgIcon, icon_button
 from dash_capture._ids import _new_id
+from dash_capture._with_hover_toolbar import with_hover_toolbar
 
 T = TypeVar("T", bound=Component)
 
@@ -129,8 +129,8 @@ def with_capture(
         else capture_element(inner, **capture_kwargs)
     )
 
-    # hover_toolbar wraps inner (element + toolbar).
+    # with_hover_toolbar wraps inner (element + toolbar).
     # outer wrap adds wizard as a sibling — nested wraps walk the __wrapped__
     # chain so id and proxy props resolve to the original inner component.
-    with_toolbar = hover_toolbar(inner, [btn], display=display)
+    with_toolbar = with_hover_toolbar(inner, [btn], display=display)
     return wrap(with_toolbar, children=[with_toolbar, wizard])

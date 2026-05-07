@@ -66,9 +66,9 @@ a `CaptureStrategy`. Signature: `(el, fmt, hideSelectors, debug)`.
 
 ::: dash_capture._icons.SvgIcon
 
-### hover_toolbar
+### with_hover_toolbar
 
-::: dash_capture._hover_toolbar.hover_toolbar
+::: dash_capture._with_hover_toolbar.with_hover_toolbar
 
 ### icon_button
 

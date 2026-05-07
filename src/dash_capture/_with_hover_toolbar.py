@@ -29,7 +29,7 @@ _CSS_ID = "dcap-hover-toolbar-css"
 _CSS = ".dcap-hover-wrapper:hover .dcap-hover-toolbar { opacity: 1 !important; }"
 
 
-def hover_toolbar(
+def with_hover_toolbar(
     inner: T,
     buttons: Sequence[html.Button],
     *,
@@ -63,11 +63,11 @@ def hover_toolbar(
 
     Examples
     --------
-    >>> from dash_capture import hover_toolbar, icon_button, SvgIcon, capture_element
+    >>> from dash_capture import with_hover_toolbar, icon_button, SvgIcon, capture_element
     >>> icon = SvgIcon(path="M350 100 H650 V450 ...")
     >>> btn = icon_button(icon, "cap-btn", tooltip="Export")
     >>> table = dash_table.DataTable(id="my-table", ...)
-    >>> wrapped = hover_toolbar(table, [btn])   # type: DataTable
+    >>> wrapped = with_hover_toolbar(table, [btn])   # type: DataTable
     >>> wizard = capture_element("my-table", trigger=btn)
     """
     sentinel_id = f"_dcap-hover-css-{secrets.token_hex(4)}"

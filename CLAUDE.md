@@ -30,7 +30,7 @@ become auto-generated form fields in the wizard (via `dash_fn_form`).
 | [_icons.py](src/dash_capture/_icons.py) | `SvgIcon` dataclass + `icon_button`. Generic SVG icon primitives, not Plotly-specific. |
 | [_trigger.py](src/dash_capture/_trigger.py) | `CaptureButton` — trigger configuration passed as `trigger=` to capture wizards. |
 | [_modebar.py](src/dash_capture/_modebar.py) | Plotly-modebar button injection: `add_modebar_button` (see "Modebar injection" below — the fragile bit). |
-| [_hover_toolbar.py](src/dash_capture/_hover_toolbar.py) | `hover_toolbar`. CSS hover-reveal toolbar for arbitrary elements via `dash-wrap`. |
+| [_with_hover_toolbar.py](src/dash_capture/_with_hover_toolbar.py) | `with_hover_toolbar`. CSS hover-reveal toolbar for arbitrary elements via `dash-wrap`. |
 | [_dropdown.py](src/dash_capture/_dropdown.py) | Generic dropdown (used for the wizard's `···` overflow menu). |
 | [_html2canvas.py](src/dash_capture/_html2canvas.py) | Injects the vendored `html2canvas.min.js` into `index_string` when an html2canvas-based strategy is used. |
 | [_ids.py](src/dash_capture/_ids.py) | `_new_id(prefix)` — random-suffixed unique component IDs. |
@@ -65,7 +65,7 @@ JS captures with the resolved opts.
   (`_target`, `_snapshot_img`, `_fig_data`) **at definition time**. Strongly
   recommended for custom renderers — a typo like `_snaphot_img` would
   silently break the wizard at runtime without it.
-- `hover_toolbar(inner, buttons, *, display="inline-block")` — wraps any
+- `with_hover_toolbar(inner, buttons, *, display="inline-block")` — wraps any
   component in a CSS hover-revealed toolbar. Uses `dash-wrap` internally for
   full callback transparency; returns the same type as `inner`. CSS injected
   via `clientside_callback` — no assets file needed.
