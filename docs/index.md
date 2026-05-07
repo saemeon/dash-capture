@@ -62,10 +62,14 @@ a `CaptureStrategy`. Signature: `(el, fmt, hideSelectors, debug)`.
 
 ::: dash_capture.capture.FromPlotly
 
+### SvgIcon
+
+::: dash_capture._icons.SvgIcon
+
 ### hover_toolbar
 
 ::: dash_capture._hover_toolbar.hover_toolbar
 
 ### icon_button
 
-::: dash_capture._hover_toolbar.icon_button
+::: dash_capture._icons.icon_button

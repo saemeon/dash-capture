@@ -16,15 +16,12 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Sequence
-from typing import TypeVar
-from urllib.parse import quote
+from typing import Any, TypeVar
 
 import dash
 from dash import Input, Output, dcc, html
 from dash.development.base_component import Component
 from dash_wrap import wrap
-
-from dash_capture._modebar import ModebarIcon
 
 T = TypeVar("T", bound=Component)
 
@@ -66,8 +63,8 @@ def hover_toolbar(
 
     Examples
     --------
-    >>> from dash_capture import hover_toolbar, icon_button, ModebarIcon, capture_element
-    >>> icon = ModebarIcon(path="M350 100 H650 V450 ...")
+    >>> from dash_capture import hover_toolbar, icon_button, SvgIcon, capture_element
+    >>> icon = SvgIcon(path="M350 100 H650 V450 ...")
     >>> btn = icon_button(icon, "cap-btn", tooltip="Export")
     >>> table = dash_table.DataTable(id="my-table", ...)
     >>> wrapped = hover_toolbar(table, [btn])   # type: DataTable
@@ -112,61 +109,4 @@ def hover_toolbar(
         children=[dcc.Store(id=sentinel_id, data=0), inner, toolbar],
         className="dcap-hover-wrapper",
         style={"position": "relative", "display": display},
-    )
-
-
-def icon_button(
-    icon: ModebarIcon,
-    button_id: str,
-    *,
-    tooltip: str = "",
-    height: int = 20,
-) -> html.Button:
-    """Render a :class:`~dash_capture.ModebarIcon` as a standalone Dash button.
-
-    Mirrors the sizing used by the Plotly modebar injector: height is
-    fixed, width computed from the icon's viewBox aspect ratio. The SVG
-    is embedded as a data URI on ``html.Img`` — works on any Dash version.
-
-    Parameters
-    ----------
-    icon : ModebarIcon
-        The icon definition to render.
-    button_id : str
-        ``id`` of the resulting ``html.Button``.
-    tooltip : str
-        ``title`` attribute (hover tooltip).
-    height : int
-        Icon height in pixels (default 20, matching the Plotly modebar).
-
-    Examples
-    --------
-    >>> from dash_capture import ModebarIcon, icon_button
-    >>> icon = ModebarIcon(path="M500 0 L1000 1000 L0 1000 Z")
-    >>> btn = icon_button(icon, "my-btn", tooltip="Export")
-    """
-    width = round(height * icon.width / icon.height)
-    svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {icon.width} {icon.height}" '
-        f'width="{width}" height="{height}">'
-        f"{icon.to_svg_inner()}</svg>"
-    )
-    return html.Button(
-        id=button_id,
-        n_clicks=0,
-        title=tooltip,
-        children=html.Img(
-            src="data:image/svg+xml;utf8," + quote(svg),
-            height=height,
-            style={"display": "block"},
-        ),
-        style={
-            "background": "rgba(255,255,255,0.85)",
-            "border": "1px solid #ccc",
-            "borderRadius": "4px",
-            "padding": "4px 6px",
-            "cursor": "pointer",
-            "pointerEvents": "auto",
-        },
     )

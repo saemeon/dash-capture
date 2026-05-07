@@ -16,7 +16,9 @@ from dash import Input, Output, dcc, html
 from dash_fn_form import Field, FieldHook, FnForm, FromComponent
 
 from dash_capture._ids import _new_id
-from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
+from dash_capture._icons import SvgIcon
+from dash_capture._modebar import add_modebar_button
+from dash_capture._trigger import CaptureButton
 from dash_capture._wizard import wire_wizard
 from dash_capture.strategies import (
     _HTML2CANVAS_CAPTURE,
@@ -472,13 +474,13 @@ def _make_wizard(cfg: WizardConfig) -> html.Div:
     # Otherwise the trigger flows through as-is.
     trigger = cfg.trigger
     modebar_bridge = None
-    if trigger == "modebar" or isinstance(trigger, ModebarButton | ModebarIcon):
-        if isinstance(trigger, ModebarButton):
+    if trigger == "modebar" or isinstance(trigger, CaptureButton | SvgIcon):
+        if isinstance(trigger, CaptureButton):
             mb = trigger
-        elif isinstance(trigger, ModebarIcon):
-            mb = ModebarButton(icon=trigger)
+        elif isinstance(trigger, SvgIcon):
+            mb = CaptureButton(icon=trigger)
         else:
-            mb = ModebarButton()
+            mb = CaptureButton()
         bridge_id = f"_dcap_modebar_{uid}"
         modebar_bridge = add_modebar_button(cfg.element_id, bridge_id, button=mb)
         trigger = modebar_bridge
@@ -562,8 +564,8 @@ def capture_graph(
         PIL renderers (``bordered`` / ``titled`` / ``watermarked``)
         are available in :mod:`dash_capture.pil` (requires the
         ``[pil]`` extra).
-    trigger : str, Dash component, or ModebarButton
-        String label, custom component, ``"modebar"``, or :class:`ModebarButton`.
+    trigger : str, Dash component, or CaptureButton
+        String label, custom component, ``"modebar"``, or :class:`CaptureButton`.
     strategy : CaptureStrategy, optional
         Capture strategy. Defaults to :func:`~dash_capture.plotly_strategy`.
         Pass ``plotly_strategy(strip_title=True, strip_legend=True, ...)``

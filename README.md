@@ -69,13 +69,13 @@ capture_element("my-data-table", trigger="Capture table")
 ### Hover toolbar — icon button that appears on mouse-over
 
 For elements without a Plotly modebar, `hover_toolbar` wraps any component in a
-floating toolbar that appears on hover. Use `icon_button` to reuse a `ModebarIcon`
+floating toolbar that appears on hover. Use `icon_button` to render a `SvgIcon`
 as a normal Dash button:
 
 ```python
-from dash_capture import hover_toolbar, icon_button, ModebarIcon, capture_element
+from dash_capture import hover_toolbar, icon_button, SvgIcon, capture_element
 
-download_icon = ModebarIcon(
+download_icon = SvgIcon(
     path="M350 100 H650 V450 H800 L500 750 L200 450 H350 Z M200 820 H800 V900 H200 Z"
 )
 btn = icon_button(download_icon, "cap-btn", tooltip="Export table")

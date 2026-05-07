@@ -27,8 +27,10 @@ become auto-generated form fields in the wizard (via `dash_fn_form`).
 | [_wizard.py](src/dash_capture/_wizard.py) | Generic modal wizard (trigger button + overlay + dialog + close). Independent of capture concerns. |
 | [_wizard_layout.py](src/dash_capture/_wizard_layout.py) | Pure DOM construction for the wizard body (config fields \| preview \| generate/download/copy row). |
 | [_wizard_callbacks.py](src/dash_capture/_wizard_callbacks.py) | All wizard callback registration. One `_register_*` function per callback, assembled by `wire_wizard`. |
-| [_modebar.py](src/dash_capture/_modebar.py) | Plotly-modebar button injection (see "Modebar injection" below — the fragile bit). |
-| [_hover_toolbar.py](src/dash_capture/_hover_toolbar.py) | `hover_toolbar` + `icon_button`. CSS hover-reveal toolbar for arbitrary elements via `dash-wrap`. |
+| [_icons.py](src/dash_capture/_icons.py) | `SvgIcon` dataclass + `icon_button`. Generic SVG icon primitives, not Plotly-specific. |
+| [_trigger.py](src/dash_capture/_trigger.py) | `CaptureButton` — trigger configuration passed as `trigger=` to capture wizards. |
+| [_modebar.py](src/dash_capture/_modebar.py) | Plotly-modebar button injection: `add_modebar_button` (see "Modebar injection" below — the fragile bit). |
+| [_hover_toolbar.py](src/dash_capture/_hover_toolbar.py) | `hover_toolbar`. CSS hover-reveal toolbar for arbitrary elements via `dash-wrap`. |
 | [_dropdown.py](src/dash_capture/_dropdown.py) | Generic dropdown (used for the wizard's `···` overflow menu). |
 | [_html2canvas.py](src/dash_capture/_html2canvas.py) | Injects the vendored `html2canvas.min.js` into `index_string` when an html2canvas-based strategy is used. |
 | [_ids.py](src/dash_capture/_ids.py) | `_new_id(prefix)` — random-suffixed unique component IDs. |
@@ -68,8 +70,8 @@ JS captures with the resolved opts.
   full callback transparency; returns the same type as `inner`. CSS injected
   via `clientside_callback` — no assets file needed.
 - `icon_button(icon, button_id, *, tooltip, height)` — renders a
-  `ModebarIcon` as a standalone `html.Button` (SVG data URI on `html.Img`).
-  The same icon definition can drive both a modebar button and a hover toolbar.
+  `SvgIcon` as a standalone `html.Button` (SVG data URI on `html.Img`).
+  The same icon definition can drive both a Plotly modebar button and a hover toolbar.
 
 ## ID scheme
 
@@ -81,14 +83,14 @@ process (common in tests).
 ## Modebar injection (the fragile part)
 
 `capture_graph` accepts `trigger="modebar"` (the default) or a
-`ModebarButton` / `ModebarIcon`. The implementation lives in
+`CaptureButton` / `SvgIcon`. The implementation lives in
 [_modebar.py](src/dash_capture/_modebar.py) and is the single most fragile
 piece of the package — document it well before touching.
 
 ### Architecture
 
 ```
-ModebarButton / ModebarIcon  ──►  add_modebar_button(graph_id, bridge_id, button)
+CaptureButton / SvgIcon  ──►  add_modebar_button(graph_id, bridge_id, button)
                                           │
                                           ├── returns html.Div(id=bridge_id, n_clicks=0)   ← the "bridge"
                                           └── registers clientside_callback that
@@ -254,10 +256,7 @@ symmetric error handling if "wizard won't close" issues ever resurface.
 - `examples/table_capture_demo.py` — `capture_element` against a `dash_table.DataTable`.
 - `examples/modebar_demo.py` — minimal repro harness for modebar-button
   behavior (default emoji + custom SVG icon variants).
-- `examples/icon_button_demo.py` — same `ModebarIcon` used as a modebar
-  button (via `capture_graph`) and as a standalone button (via `icon_button`
-  + `capture_element`).
-- `examples/hover_toolbar_poc.py` — `hover_toolbar` over five element types:
+- `examples/hover_toolbar_poc.py` — `with_capture` over five element types:
   `DataTable`, plain `html.Div`, KPI card, `dcc.Graph`, full-width block.
 - `examples/hbar_labels_repro.py` — disappearing-y-label repro for
   horizontal bar charts across capture sizes; used to attribute

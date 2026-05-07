@@ -16,7 +16,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-from dash_capture import ModebarButton, add_modebar_button, capture_graph
+from dash_capture import CaptureButton, add_modebar_button, capture_graph
 
 
 def _hover_graph(dash_duo, graph_id: str) -> None:
@@ -102,7 +102,7 @@ def test_modebar_button_click_fires_callback(dash_duo):
 
 
 def test_modebar_button_with_text_label(dash_duo):
-    """ModebarButton with label renders text, not SVG.
+    """CaptureButton with label renders text, not SVG.
 
     We read the button's text via ``textContent`` rather than
     Selenium's ``.text``. Plotly fades the modebar (``opacity: 0``)
@@ -116,7 +116,7 @@ def test_modebar_button_with_text_label(dash_duo):
     bridge = add_modebar_button(
         "graph",
         "text-btn",
-        button=ModebarButton(label="SNB📷", tooltip="Export"),
+        button=CaptureButton(label="SNB📷", tooltip="Export"),
     )
 
     app.layout = html.Div([graph, bridge])

@@ -27,8 +27,8 @@ Public API:
   :func:`multi_canvas_strategy` — capture strategies
 * :func:`build_reflow_preprocess`, :data:`MULTI_CANVAS_CAPTURE_JS` —
   building blocks for custom strategies
-* :class:`ModebarButton`, :class:`ModebarIcon`,
-  :func:`add_modebar_button` — Plotly modebar trigger helpers
+* :class:`SvgIcon`, :func:`icon_button` — SVG icon primitives
+* :class:`CaptureButton`, :func:`add_modebar_button` — Plotly modebar trigger helpers
 * :class:`FromPlotly` — pre-populate form fields from the live figure
 * :class:`WizardAction` — extra action button for the wizard
 
@@ -47,8 +47,11 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
-from dash_capture._hover_toolbar import hover_toolbar, icon_button
-from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
+from dash_capture._hover_toolbar import hover_toolbar
+from dash_capture._icons import SvgIcon, icon_button
+from dash_capture._modebar import add_modebar_button
+from dash_capture._trigger import CaptureButton
+from dash_capture._with_capture import with_capture
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
@@ -83,13 +86,15 @@ __all__ = [
     # building blocks for custom strategies
     "build_reflow_preprocess",
     "MULTI_CANVAS_CAPTURE_JS",
-    # hover toolbar
-    "hover_toolbar",
+    # SVG icon primitives
+    "SvgIcon",
     "icon_button",
+    # hover toolbar + instance-based capture
+    "hover_toolbar",
+    "with_capture",
     # modebar
     "add_modebar_button",
-    "ModebarButton",
-    "ModebarIcon",
+    "CaptureButton",
     # hooks
     "FromPlotly",
     # wizard extensibility

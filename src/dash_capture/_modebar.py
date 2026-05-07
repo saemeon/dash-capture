@@ -5,73 +5,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import dash
 from dash import Input, Output, html
 
-
-@dataclass
-class ModebarIcon:
-    """SVG icon definition for a modebar button.
-
-    Parameters
-    ----------
-    path : str
-        SVG ``<path d="...">`` data. Ignored if *svg_content* is set.
-    svg_content : str
-        Raw SVG inner markup for complex icons (multiple paths, text, etc.).
-    width, height : int
-        ViewBox dimensions (default 1000 x 1000, matching Plotly icons).
-    transform : str
-        Optional SVG transform applied to the path.
-
-    Examples
-    --------
-    >>> from dash_capture import ModebarIcon
-    >>> icon = ModebarIcon(path="M500 0 L1000 1000 L0 1000 Z")
-    """
-
-    path: str = ""
-    svg_content: str = ""
-    width: int = 1000
-    height: int = 1000
-    transform: str = ""
-
-    def to_svg_inner(self) -> str:
-        """Return SVG inner markup."""
-        if self.svg_content:
-            return self.svg_content
-        transform = f' transform="{self.transform}"' if self.transform else ""
-        return f'<path fill="currentColor" d="{self.path}"{transform}/>'
-
+from dash_capture._icons import SvgIcon
+from dash_capture._trigger import CaptureButton
 
 _DEFAULT_LABEL = "\U0001f4f7"  # 📷
-
-
-@dataclass
-class ModebarButton:
-    """Configuration for a modebar button.
-
-    Parameters
-    ----------
-    icon : ModebarIcon, optional
-        SVG icon. When set, rendered as SVG instead of a text label.
-    label : str
-        Text/emoji label. Defaults to a camera emoji when neither
-        *label* nor *icon* is set.
-    tooltip : str
-        Hover tooltip text (default ``"Capture"``).
-
-    Examples
-    --------
-    >>> from dash_capture import ModebarButton, capture_graph
-    >>> capture_graph("my-graph", trigger=ModebarButton(tooltip="Export"))
-    """
-
-    icon: ModebarIcon | None = None
-    label: str = ""
-    tooltip: str = "Capture"
 
 
 def _build_inject_js(
@@ -79,7 +19,7 @@ def _build_inject_js(
     bridge_id: str,
     tooltip: str,
     *,
-    icon: ModebarIcon | None = None,
+    icon: SvgIcon | None = None,
     label: str = "",
 ) -> str:
     """Build JS that injects a button into the Plotly modebar."""
@@ -155,8 +95,8 @@ def add_modebar_button(
     graph_id: str,
     bridge_id: str,
     *,
-    button: ModebarButton | None = None,
-    icon: ModebarIcon | None = None,
+    button: CaptureButton | None = None,
+    icon: SvgIcon | None = None,
     tooltip: str = "Capture",
 ) -> html.Div:
     """Add a custom button to a Plotly graph's modebar.
@@ -171,10 +111,10 @@ def add_modebar_button(
     bridge_id : str
         Unique ID for the hidden bridge component. Use as
         ``Input(bridge_id, "n_clicks")`` in your callback.
-    button : ModebarButton, optional
+    button : CaptureButton, optional
         Button configuration. When provided, *icon* and *tooltip*
         kwargs are ignored.
-    icon : ModebarIcon, optional
+    icon : SvgIcon, optional
         SVG icon to display.
     tooltip : str
         Hover tooltip text (default ``"Capture"``).
