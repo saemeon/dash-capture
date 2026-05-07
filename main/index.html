@@ -482,6 +482,50 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#svgicon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SvgIcon
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dash_capture._icons.SvgIcon.to_svg_inner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_svg_inner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hover_toolbar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hover_toolbar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icon_button" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        icon_button
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -676,6 +720,50 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#svgicon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SvgIcon
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dash_capture._icons.SvgIcon.to_svg_inner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_svg_inner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hover_toolbar" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        hover_toolbar
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#icon_button" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        icon_button
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -787,12 +875,12 @@ are available in :mod:<code>dash_capture.pil</code> (requires the
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>String label, custom component, <code>"modebar"</code>, or :class:<code>ModebarButton</code>.</p>
+                <p>String label, custom component, <code>"modebar"</code>, or :class:<code>CaptureButton</code>.</p>
               </div>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code>str, Dash component, or ModebarButton</code>
+                      <code>str, Dash component, or CaptureButton</code>
                   </span>
                   <span class="doc-param-default">
                     <b>DEFAULT:</b>
@@ -2580,6 +2668,415 @@ a <code>CaptureStrategy</code>. Signature: <code>(el, fmt, hideSelectors, debug)
 
 
   </div>
+
+    </div>
+
+</div><h3 id="svgicon">SvgIcon<a class="headerlink" href="#svgicon" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-class">
+
+
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>SVG icon definition.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>path</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>SVG <code>&lt;path d="..."&gt;</code> data. Ignored if <em>svg_content</em> is set.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>svg_content</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Raw SVG inner markup for complex icons (multiple paths, text, etc.).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>width</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>ViewBox dimensions (default 1000 x 1000, matching Plotly icons).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>1000</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>height</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>ViewBox dimensions (default 1000 x 1000, matching Plotly icons).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>1000</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>transform</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Optional SVG transform applied to the path.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">SvgIcon</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;M500 0 L1000 1000 L0 1000 Z&quot;</span><span class="p">)</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="dash_capture._icons.SvgIcon.to_svg_inner" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">to_svg_inner</span>
+
+
+<a href="#dash_capture._icons.SvgIcon.to_svg_inner" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">to_svg_inner</span><span class="p">()</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return SVG inner markup.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h3 id="hover_toolbar">hover_toolbar<a class="headerlink" href="#hover_toolbar" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Wrap <em>inner</em> with a CSS hover-revealed toolbar.</p>
+<p>Uses :func:<code>dash_wrap.wrap</code> internally, so the returned object is
+fully callback-transparent — its type, <code>id</code>, and proxy props are
+identical to <em>inner</em> from Dash's perspective. Callers can pass the
+return value wherever the original component is expected.</p>
+<p>The toolbar is revealed on <code>:hover</code> via a <code>&lt;style&gt;</code> tag injected
+into <code>&lt;head&gt;</code> once per page (idempotent across multiple wrappers).</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>inner</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Any Dash component with an <code>id</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="dash_capture._hover_toolbar.T">T</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>buttons</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Toolbar buttons. Each must have a unique <code>id</code> and <code>n_clicks</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code>sequence of html.Button</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>display</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>CSS <code>display</code> for the outer wrapper (default <code>"inline-block"</code>).
+Pass <code>"block"</code> for full-width elements.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;inline-block&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">RETURNS</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <span class="doc-returns-annotation">
+                    <code><span title="dash_capture._hover_toolbar.T">T</span></code>
+                </span>
+            </td>
+            <td class="doc-returns-details">
+              <div class="doc-md-description">
+                <p>A <code>dash-wrap</code> wrapper whose declared and runtime type matches
+<em>inner</em>. Callbacks written against <em>inner</em> keep working unchanged.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">hover_toolbar</span><span class="p">,</span> <span class="n">icon_button</span><span class="p">,</span> <span class="n">SvgIcon</span><span class="p">,</span> <span class="n">capture_element</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;M350 100 H650 V450 ...&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">btn</span> <span class="o">=</span> <span class="n">icon_button</span><span class="p">(</span><span class="n">icon</span><span class="p">,</span> <span class="s2">&quot;cap-btn&quot;</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="s2">&quot;Export&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span> <span class="o">=</span> <span class="n">dash_table</span><span class="o">.</span><span class="n">DataTable</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wrapped</span> <span class="o">=</span> <span class="n">hover_toolbar</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="p">[</span><span class="n">btn</span><span class="p">])</span>   <span class="c1"># type: DataTable</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wizard</span> <span class="o">=</span> <span class="n">capture_element</span><span class="p">(</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span> <span class="n">trigger</span><span class="o">=</span><span class="n">btn</span><span class="p">)</span>
+</code></pre></div>
+
+
+    </div>
+
+</div><h3 id="icon_button">icon_button<a class="headerlink" href="#icon_button" title="Permanent link">&para;</a></h3>
+
+
+<div class="doc doc-object doc-function">
+
+
+
+
+    <div class="doc doc-contents first">
+
+        <p>Render a :class:<code>SvgIcon</code> as a standalone Dash button.</p>
+<p>Height is fixed, width computed from the icon's viewBox aspect ratio.
+The SVG is embedded as a data URI on <code>html.Img</code> — works on any Dash
+version.</p>
+
+
+<table>
+      <thead>
+        <tr>
+          <th><span class="doc-section-title">PARAMETER</span></th>
+          <th><span>DESCRIPTION</span></th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>icon</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>The icon definition to render.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="dash_capture._icons.SvgIcon">SvgIcon</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>button_id</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p><code>id</code> of the resulting <code>html.Button</code>.</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>tooltip</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p><code>title</code> attribute (hover tooltip).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="str">str</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>&#39;&#39;</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>height</code>
+            </td>
+            <td class="doc-param-details">
+              <div class="doc-md-description">
+                <p>Icon height in pixels (default 20, matching the Plotly modebar).</p>
+              </div>
+              <p>
+                  <span class="doc-param-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="int">int</span></code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>20</code>
+                  </span>
+              </p>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Examples:</span></p>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">SvgIcon</span><span class="p">,</span> <span class="n">icon_button</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;M500 0 L1000 1000 L0 1000 Z&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">btn</span> <span class="o">=</span> <span class="n">icon_button</span><span class="p">(</span><span class="n">icon</span><span class="p">,</span> <span class="s2">&quot;my-btn&quot;</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="s2">&quot;Export&quot;</span><span class="p">)</span>
+</code></pre></div>
+
 
     </div>
 
