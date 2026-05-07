@@ -244,7 +244,7 @@ symmetric error handling if "wizard won't close" issues ever resurface.
 - Smoke test: `tests/test_smoke.py` — imports every public symbol.
 - No tests exercise the modebar injector JS directly. If you touch
   [_modebar.py](src/dash_capture/_modebar.py), spin up
-  [examples/modebar_demo.py](examples/modebar_demo.py) and verify in a
+  [examples/demo.py](examples/demo.py) (section 1) and verify in a
   real browser — ideally after backgrounding the tab for a few minutes.
 
 ## Example to reach for
