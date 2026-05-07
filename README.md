@@ -66,6 +66,38 @@ capture_element("my-data-table", trigger="Capture table")
 
 `capture_element` defaults to `html2canvas_strategy()` and works with any Dash component that has an `id`.
 
+### Hover toolbar — icon button that appears on mouse-over
+
+For elements without a Plotly modebar, `hover_toolbar` wraps any component in a
+floating toolbar that appears on hover. Use `icon_button` to reuse a `ModebarIcon`
+as a normal Dash button:
+
+```python
+from dash_capture import hover_toolbar, icon_button, ModebarIcon, capture_element
+
+download_icon = ModebarIcon(
+    path="M350 100 H650 V450 H800 L500 750 L200 450 H350 Z M200 820 H800 V900 H200 Z"
+)
+btn = icon_button(download_icon, "cap-btn", tooltip="Export table")
+
+# hover_toolbar returns the same type as its input — full callback transparency
+wrapped_table = hover_toolbar(table, [btn])
+wizard = capture_element("my-table", trigger=btn, filename="table.png")
+
+app.layout = html.Div([wrapped_table, wizard])
+```
+
+`hover_toolbar` uses `dash-wrap` internally — the returned object is
+callback-transparent, so callbacks written against `table` keep working on
+`wrapped_table` unchanged. The hover CSS is injected into `<head>` via a
+`clientside_callback`; no assets file or `index_string` patching needed.
+
+Pass `display="block"` for full-width elements:
+
+```python
+wrapped = hover_toolbar(my_div, [btn], display="block")
+```
+
 ### Built-in PIL renderers (`dash-capture[pil]`)
 
 ```python

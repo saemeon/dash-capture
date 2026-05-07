@@ -47,6 +47,7 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 
+from dash_capture._hover_toolbar import hover_toolbar, icon_button
 from dash_capture._modebar import ModebarButton, ModebarIcon, add_modebar_button
 from dash_capture.capture import (
     CaptureBinding,
@@ -82,6 +83,9 @@ __all__ = [
     # building blocks for custom strategies
     "build_reflow_preprocess",
     "MULTI_CANVAS_CAPTURE_JS",
+    # hover toolbar
+    "hover_toolbar",
+    "icon_button",
     # modebar
     "add_modebar_button",
     "ModebarButton",

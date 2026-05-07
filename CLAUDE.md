@@ -28,6 +28,7 @@ become auto-generated form fields in the wizard (via `dash_fn_form`).
 | [_wizard_layout.py](src/dash_capture/_wizard_layout.py) | Pure DOM construction for the wizard body (config fields \| preview \| generate/download/copy row). |
 | [_wizard_callbacks.py](src/dash_capture/_wizard_callbacks.py) | All wizard callback registration. One `_register_*` function per callback, assembled by `wire_wizard`. |
 | [_modebar.py](src/dash_capture/_modebar.py) | Plotly-modebar button injection (see "Modebar injection" below — the fragile bit). |
+| [_hover_toolbar.py](src/dash_capture/_hover_toolbar.py) | `hover_toolbar` + `icon_button`. CSS hover-reveal toolbar for arbitrary elements via `dash-wrap`. |
 | [_dropdown.py](src/dash_capture/_dropdown.py) | Generic dropdown (used for the wizard's `···` overflow menu). |
 | [_html2canvas.py](src/dash_capture/_html2canvas.py) | Injects the vendored `html2canvas.min.js` into `index_string` when an html2canvas-based strategy is used. |
 | [_ids.py](src/dash_capture/_ids.py) | `_new_id(prefix)` — random-suffixed unique component IDs. |
@@ -62,6 +63,13 @@ JS captures with the resolved opts.
   (`_target`, `_snapshot_img`, `_fig_data`) **at definition time**. Strongly
   recommended for custom renderers — a typo like `_snaphot_img` would
   silently break the wizard at runtime without it.
+- `hover_toolbar(inner, buttons, *, display="inline-block")` — wraps any
+  component in a CSS hover-revealed toolbar. Uses `dash-wrap` internally for
+  full callback transparency; returns the same type as `inner`. CSS injected
+  via `clientside_callback` — no assets file needed.
+- `icon_button(icon, button_id, *, tooltip, height)` — renders a
+  `ModebarIcon` as a standalone `html.Button` (SVG data URI on `html.Img`).
+  The same icon definition can drive both a modebar button and a hover toolbar.
 
 ## ID scheme
 
@@ -246,6 +254,11 @@ symmetric error handling if "wizard won't close" issues ever resurface.
 - `examples/table_capture_demo.py` — `capture_element` against a `dash_table.DataTable`.
 - `examples/modebar_demo.py` — minimal repro harness for modebar-button
   behavior (default emoji + custom SVG icon variants).
+- `examples/icon_button_demo.py` — same `ModebarIcon` used as a modebar
+  button (via `capture_graph`) and as a standalone button (via `icon_button`
+  + `capture_element`).
+- `examples/hover_toolbar_poc.py` — `hover_toolbar` over five element types:
+  `DataTable`, plain `html.Div`, KPI card, `dcc.Graph`, full-width block.
 - `examples/hbar_labels_repro.py` — disappearing-y-label repro for
   horizontal bar charts across capture sizes; used to attribute
   "Mode A vs Mode B" in the Plotly auto-tick discussion (see
