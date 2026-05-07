@@ -249,15 +249,9 @@ symmetric error handling if "wizard won't close" issues ever resurface.
 
 ## Example to reach for
 
-- `examples/capture_demo.py` — full showcase of form field types, all
-  `@renderer` variants, strategies, error display.
-- `examples/corpframe_demo.py` — capture + corporate-frame export pipeline.
+- `examples/demo.py` — full demo: modebar buttons, hover toolbar (`with_capture`),
+  all renderer/field-type variants, size control, explicit button placement.
 - `examples/mpl_renderer.py` — custom matplotlib-based renderer.
-- `examples/table_capture_demo.py` — `capture_element` against a `dash_table.DataTable`.
-- `examples/modebar_demo.py` — minimal repro harness for modebar-button
-  behavior (default emoji + custom SVG icon variants).
-- `examples/hover_toolbar_poc.py` — `with_capture` over five element types:
-  `DataTable`, plain `html.Div`, KPI card, `dcc.Graph`, full-width block.
 - `examples/hbar_labels_repro.py` — disappearing-y-label repro for
   horizontal bar charts across capture sizes; used to attribute
   "Mode A vs Mode B" in the Plotly auto-tick discussion (see
