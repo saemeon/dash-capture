@@ -52,6 +52,10 @@ from dash_capture._icons import SvgIcon, icon_button
 from dash_capture._modebar import add_modebar_button
 from dash_capture._trigger import CaptureButton
 from dash_capture._with_capture import with_capture
+
+# Backward-compat aliases
+ModebarIcon = SvgIcon
+ModebarButton = CaptureButton
 from dash_capture.capture import (
     CaptureBinding,
     FromPlotly,
@@ -95,6 +99,9 @@ __all__ = [
     # modebar
     "add_modebar_button",
     "CaptureButton",
+    # backward-compat aliases
+    "ModebarIcon",
+    "ModebarButton",
     # hooks
     "FromPlotly",
     # wizard extensibility
