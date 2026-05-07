@@ -505,10 +505,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#hover_toolbar" class="md-nav__link">
+  <a href="#with_hover_toolbar" class="md-nav__link">
     <span class="md-ellipsis">
       
-        hover_toolbar
+        with_hover_toolbar
       
     </span>
   </a>
@@ -743,10 +743,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#hover_toolbar" class="md-nav__link">
+  <a href="#with_hover_toolbar" class="md-nav__link">
     <span class="md-ellipsis">
       
-        hover_toolbar
+        with_hover_toolbar
       
     </span>
   </a>
@@ -2850,7 +2850,7 @@ a <code>CaptureStrategy</code>. Signature: <code>(el, fmt, hideSelectors, debug)
 
     </div>
 
-</div><h3 id="hover_toolbar">hover_toolbar<a class="headerlink" href="#hover_toolbar" title="Permanent link">&para;</a></h3>
+</div><h3 id="with_hover_toolbar">with_hover_toolbar<a class="headerlink" href="#with_hover_toolbar" title="Permanent link">&para;</a></h3>
 
 
 <div class="doc doc-object doc-function">
@@ -2888,7 +2888,7 @@ into <code>&lt;head&gt;</code> once per page (idempotent across multiple wrapper
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><span title="dash_capture._hover_toolbar.T">T</span></code>
+                      <code><span title="dash_capture._with_hover_toolbar.T">T</span></code>
                   </span>
               </p>
             </td>
@@ -2945,7 +2945,7 @@ Pass <code>"block"</code> for full-width elements.</p>
           <tr class="doc-section-item">
             <td>
                 <span class="doc-returns-annotation">
-                    <code><span title="dash_capture._hover_toolbar.T">T</span></code>
+                    <code><span title="dash_capture._with_hover_toolbar.T">T</span></code>
                 </span>
             </td>
             <td class="doc-returns-details">
@@ -2960,11 +2960,11 @@ Pass <code>"block"</code> for full-width elements.</p>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
-    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">hover_toolbar</span><span class="p">,</span> <span class="n">icon_button</span><span class="p">,</span> <span class="n">SvgIcon</span><span class="p">,</span> <span class="n">capture_element</span>
+    <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">with_hover_toolbar</span><span class="p">,</span> <span class="n">icon_button</span><span class="p">,</span> <span class="n">SvgIcon</span><span class="p">,</span> <span class="n">capture_element</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;M350 100 H650 V450 ...&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">btn</span> <span class="o">=</span> <span class="n">icon_button</span><span class="p">(</span><span class="n">icon</span><span class="p">,</span> <span class="s2">&quot;cap-btn&quot;</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="s2">&quot;Export&quot;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">table</span> <span class="o">=</span> <span class="n">dash_table</span><span class="o">.</span><span class="n">DataTable</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">wrapped</span> <span class="o">=</span> <span class="n">hover_toolbar</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="p">[</span><span class="n">btn</span><span class="p">])</span>   <span class="c1"># type: DataTable</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wrapped</span> <span class="o">=</span> <span class="n">with_hover_toolbar</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="p">[</span><span class="n">btn</span><span class="p">])</span>   <span class="c1"># type: DataTable</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">wizard</span> <span class="o">=</span> <span class="n">capture_element</span><span class="p">(</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span> <span class="n">trigger</span><span class="o">=</span><span class="n">btn</span><span class="p">)</span>
 </code></pre></div>
 
