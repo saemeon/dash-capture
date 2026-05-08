@@ -15,8 +15,8 @@ import dash
 from dash import Input, Output, dcc, html
 from dash_fn_form import Field, FieldHook, FnForm, FromComponent
 
-from dash_capture._ids import _new_id
 from dash_capture._icons import SvgIcon
+from dash_capture._ids import _new_id
 from dash_capture._modebar import add_modebar_button
 from dash_capture._trigger import CaptureButton
 from dash_capture._wizard import wire_wizard

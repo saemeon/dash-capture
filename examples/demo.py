@@ -26,7 +26,6 @@ from dash_fn_form import fixed
 from dash_capture import (
     CaptureButton,
     SvgIcon,
-    capture_element,
     capture_graph,
     plotly_strategy,
     with_capture,

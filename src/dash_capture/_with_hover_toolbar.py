@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Sequence
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import dash
 from dash import Input, Output, dcc, html
