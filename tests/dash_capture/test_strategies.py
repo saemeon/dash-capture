@@ -141,7 +141,9 @@ class TestPlotlyStrategy:
 class TestHtml2canvasStrategy:
     def test_capture_js(self):
         s = html2canvas_strategy()
-        assert s.preprocess is None
+        # Preprocess is always emitted now (offscreen-clone is the perf
+        # fix regardless of capture dims).
+        assert s.preprocess is not None
         assert "html2canvas" in s.capture
         assert "toDataURL" in s.capture
 
@@ -161,54 +163,91 @@ class TestHtml2canvasStrategy:
         s = html2canvas_strategy()
         assert "opts.format" in s.capture
 
-    def test_capture_restores_saved_styles_in_finally(self):
+    def test_capture_tears_down_clone_in_finally(self):
         s = html2canvas_strategy()
         assert "finally" in s.capture
-        assert "_dcap_saved" in s.capture
+        assert "_dcap_clone" in s.capture
 
-    def test_no_preprocess_without_capture_dims(self):
-        s = html2canvas_strategy(_params={})
-        assert s.preprocess is None
+    def test_capture_targets_clone_not_live_el(self):
+        # html2canvas must be called against the clone — otherwise the
+        # whole-document clone walk operates on the live page and we lose
+        # the perf fix.
+        s = html2canvas_strategy()
+        assert "html2canvas(_dcap_target" in s.capture
+        assert "_dcap_clone" in s.capture
 
-    def test_preprocess_emitted_for_capture_width(self):
+    def test_preprocess_always_emitted(self):
+        # Old behavior: preprocess only when capture_width/height present.
+        # New behavior: always emitted because offscreen-clone is the
+        # perf fix on its own.
+        for params in ({}, {"capture_width": None}, {"capture_height": None}):
+            s = html2canvas_strategy(_params=params)
+            assert s.preprocess is not None
+            assert "_dcap_clone" in s.preprocess
+
+    def test_preprocess_emits_width_only_when_capture_width(self):
         s = html2canvas_strategy(_params={"capture_width": None})
-        assert s.preprocess is not None
-        assert "opts.width" in s.preprocess
-        # No height in params → no height assignment
-        assert "opts.height" not in s.preprocess
+        assert "_dcap_targetClone.style.width" in s.preprocess
+        assert "_dcap_targetClone.style.height" not in s.preprocess
 
-    def test_preprocess_emitted_for_capture_height(self):
+    def test_preprocess_emits_height_only_when_capture_height(self):
         s = html2canvas_strategy(_params={"capture_height": None})
-        assert s.preprocess is not None
-        assert "opts.height" in s.preprocess
-        assert "opts.width" not in s.preprocess
+        assert "_dcap_targetClone.style.height" in s.preprocess
+        assert "_dcap_targetClone.style.width" not in s.preprocess
 
-    def test_preprocess_emitted_for_both_dims(self):
+    def test_preprocess_emits_both_dims(self):
         s = html2canvas_strategy(
             _params={"capture_width": None, "capture_height": None}
         )
-        assert s.preprocess is not None
         assert "opts.width" in s.preprocess
         assert "opts.height" in s.preprocess
 
-    def test_preprocess_saves_styles_for_finally(self):
-        s = html2canvas_strategy(_params={"capture_width": None})
-        assert "_dcap_saved" in s.preprocess
-
     def test_preprocess_settle_frames_default(self):
-        s = html2canvas_strategy(_params={"capture_width": None})
+        s = html2canvas_strategy()
         assert "i < 2" in s.preprocess
 
     def test_preprocess_settle_frames_custom(self):
-        s = html2canvas_strategy(settle_frames=5, _params={"capture_width": None})
+        s = html2canvas_strategy(settle_frames=5)
         assert "i < 5" in s.preprocess
 
     def test_preprocess_does_not_set_visibility_hidden(self):
         # Regression: visibility:hidden cascades to children and html2canvas
         # skips hidden elements, dropping all text from the captured image.
-        # The resize-flicker is preferred over a silently-empty capture.
-        s = html2canvas_strategy(_params={"capture_width": None})
+        s = html2canvas_strategy()
         assert "visibility" not in s.preprocess
+
+    def test_preprocess_builds_offscreen_wrapper(self):
+        s = html2canvas_strategy()
+        assert "createElement('div')" in s.preprocess
+        assert "position:fixed" in s.preprocess
+        assert "-99999px" in s.preprocess
+
+    def test_preprocess_deep_clones_target(self):
+        s = html2canvas_strategy()
+        assert "el.cloneNode(true)" in s.preprocess
+        assert "data-dcap-target" in s.preprocess
+
+    def test_preprocess_bakes_computed_styles(self):
+        # Inline-baked computed styles are how we avoid the parent page's
+        # stylesheets dominating html2canvas's per-element style pass —
+        # the real perf fix for dash_table.
+        s = html2canvas_strategy()
+        assert "getComputedStyle" in s.preprocess
+        assert "bakeStyles" in s.preprocess
+        assert "setAttribute('style'" in s.preprocess
+
+    def test_preprocess_reconstructs_ancestor_chain(self):
+        # Ancestor walk still happens so layout-context (offset parents,
+        # flex containers etc.) is preserved, even though inline-baked
+        # styles make descendant-selector CSS irrelevant.
+        s = html2canvas_strategy()
+        assert "el.parentElement" in s.preprocess
+        assert "_a.parentElement" in s.preprocess
+
+    def test_preprocess_appends_wrapper_to_body_and_exposes_clone(self):
+        s = html2canvas_strategy()
+        assert "document.body.appendChild(_dcap_wrapper)" in s.preprocess
+        assert "el._dcap_clone = _dcap_wrapper" in s.preprocess
 
 
 class TestCanvasStrategy:

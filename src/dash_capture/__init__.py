@@ -25,8 +25,9 @@ Public API:
 * :class:`CaptureStrategy`, :func:`plotly_strategy`,
   :func:`html2canvas_strategy`, :func:`canvas_strategy`,
   :func:`multi_canvas_strategy` — capture strategies
-* :func:`build_reflow_preprocess`, :data:`MULTI_CANVAS_CAPTURE_JS` —
-  building blocks for custom strategies
+* :func:`build_reflow_preprocess`,
+  :func:`build_offscreen_clone_preprocess`,
+  :data:`MULTI_CANVAS_CAPTURE_JS` — building blocks for custom strategies
 * :class:`SvgIcon`, :func:`icon_button` — SVG icon primitives
 * :class:`CaptureButton`, :func:`add_modebar_button` — Plotly modebar trigger helpers
 * :class:`FromPlotly` — pre-populate form fields from the live figure
@@ -67,6 +68,7 @@ from dash_capture.capture import (
 from dash_capture.strategies import (
     MULTI_CANVAS_CAPTURE_JS,
     CaptureStrategy,
+    build_offscreen_clone_preprocess,
     build_reflow_preprocess,
     canvas_strategy,
     html2canvas_strategy,
@@ -89,6 +91,7 @@ __all__ = [
     "multi_canvas_strategy",
     # building blocks for custom strategies
     "build_reflow_preprocess",
+    "build_offscreen_clone_preprocess",
     "MULTI_CANVAS_CAPTURE_JS",
     # SVG icon primitives
     "SvgIcon",

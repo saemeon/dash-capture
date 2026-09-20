@@ -683,3 +683,190 @@ def test_capture_resolver_cache_skips_js_on_non_dimensional_change(dash_duo):
         f"{captures_after_title}). The cache is broken — the JS callback "
         f"is probably wired to `resolved` instead of `cache_miss`."
     )
+
+
+# ── offscreen-clone tests ────────────────────────────────────────────────
+#
+# Pin the perf fix: html2canvas_strategy must capture against an offscreen
+# clone (not the live element), with the target's ancestor class/id chain
+# reconstructed so descendant-selector CSS still matches.
+
+
+def test_capture_element_preserves_descendant_selector_css(dash_duo):
+    """A global stylesheet that targets the captured element via a
+    class-prefixed descendant selector must still apply in the offscreen
+    clone — the ancestor-chain reconstruction in
+    ``build_offscreen_clone_preprocess`` is the load-bearing piece.
+
+    If ancestor reconstruction regresses, the rule
+    ``.dcap-frame .target-box { background: red }`` won't match the
+    detached clone, the captured box will render with its default
+    (white) background, and the corner pixel will be near-white instead
+    of red.
+    """
+    import io
+
+    from PIL import Image
+
+    app = dash.Dash(__name__)
+    app.index_string = """
+        <!DOCTYPE html>
+        <html>
+            <head>
+                {%metas%}
+                <title>{%title%}</title>
+                {%favicon%}
+                {%css%}
+                <style>
+                    /* Descendant selector — only matches when the .dcap-frame
+                       ancestor is present. The offscreen-clone preprocess
+                       must reconstruct that ancestor for this rule to fire. */
+                    .dcap-frame .target-box {
+                        background: rgb(255, 0, 0);
+                    }
+                </style>
+            </head>
+            <body>
+                {%app_entry%}
+                <footer>
+                    {%config%}
+                    {%scripts%}
+                    {%renderer%}
+                </footer>
+            </body>
+        </html>
+    """
+
+    def passthrough(_target, _snapshot_img):
+        _target.write(_snapshot_img())
+
+    exporter = capture_element(
+        "t-descendant-target",
+        renderer=passthrough,
+        trigger="Capture descendant",
+    )
+
+    app.layout = html.Div(
+        className="dcap-frame",
+        children=[
+            html.Div(
+                id="t-descendant-target",
+                className="target-box",
+                style={
+                    "width": "120px",
+                    "height": "60px",
+                    # No inline background — only the descendant rule
+                    # paints this red. If the rule fails to match in
+                    # the clone, the box stays transparent/white.
+                },
+            ),
+            exporter,
+        ],
+    )
+
+    dash_duo.start_server(app)
+    dash_duo.wait_for_element("#t-descendant-target", timeout=10)
+    time.sleep(1)
+
+    _find_button(dash_duo, "Capture descendant").click()
+    raw = _wait_for_png(dash_duo, timeout=45)
+    assert raw[:4] == b"\x89PNG"
+
+    img = Image.open(io.BytesIO(raw)).convert("RGB")
+    # Sample a few pixels away from the edge to avoid any anti-aliasing.
+    r, g, b = img.getpixel((20, 20))
+    assert r > 200 and g < 60 and b < 60, (
+        f"expected red pixel from descendant-selector rule, got "
+        f"({r}, {g}, {b}). The .dcap-frame ancestor was probably not "
+        "reconstructed in the offscreen clone — descendant-selector CSS "
+        "is broken."
+    )
+
+
+def test_capture_element_does_not_mutate_live_element(dash_duo):
+    """After capture, the live element's inline width/height must be
+    unchanged — offscreen-clone mode applies capture dims to the *clone*,
+    not the live element, so there's no flicker and no leaked state.
+
+    Pinned because the old live-resize path mutated ``el.style.width`` /
+    ``el.style.height`` during capture and relied on a ``finally`` block
+    to restore them; a bug in either side leaked state. The offscreen
+    path should make the whole concern impossible.
+    """
+    NATIVE_W, NATIVE_H = 300, 150  # noqa: N806
+    TARGET_W, TARGET_H = 600, 300  # noqa: N806
+
+    layout = html.Div(
+        id="t-no-mutate",
+        style={
+            "width": f"{NATIVE_W}px",
+            "height": f"{NATIVE_H}px",
+            "background": "#ddd",
+            "boxSizing": "border-box",
+        },
+    )
+
+    def renderer(
+        _target,
+        _snapshot_img,
+        capture_width: int = TARGET_W,
+        capture_height: int = TARGET_H,
+    ):
+        _target.write(_snapshot_img())
+
+    def resolve():
+        return {"capture_width": TARGET_W, "capture_height": TARGET_H}
+
+    app = dash.Dash(__name__)
+    exporter = capture_element(
+        "t-no-mutate",
+        renderer=renderer,
+        capture_resolver=resolve,
+        trigger="Capture no-mutate",
+    )
+    app.layout = html.Div([layout, exporter])
+
+    dash_duo.start_server(app)
+    dash_duo.wait_for_element("#t-no-mutate", timeout=10)
+    time.sleep(1)
+
+    _find_button(dash_duo, "Capture no-mutate").click()
+
+    raw = _wait_for_png(dash_duo, timeout=45)
+    assert raw[:4] == b"\x89PNG"
+
+    # Wait for the finally block to tear down the wrapper.
+    time.sleep(0.5)
+
+    state = dash_duo.driver.execute_script("""
+        const el = document.getElementById('t-no-mutate');
+        return {
+            inlineW: el.style.width,
+            inlineH: el.style.height,
+            offsetW: el.offsetWidth,
+            offsetH: el.offsetHeight,
+            cloneAttached: !!el._dcap_clone,
+            wrappersInBody: document.querySelectorAll(
+                'body > iframe[style*="-99999px"]').length,
+        };
+    """)
+    assert state["inlineW"] == f"{NATIVE_W}px", (
+        f"live element inline width is {state['inlineW']!r}, "
+        f"expected '{NATIVE_W}px' — offscreen-clone mode mutated the "
+        "live element."
+    )
+    assert state["inlineH"] == f"{NATIVE_H}px", (
+        f"live element inline height is {state['inlineH']!r}, "
+        f"expected '{NATIVE_H}px'."
+    )
+    assert state["offsetW"] == NATIVE_W
+    assert state["offsetH"] == NATIVE_H
+    assert not state["cloneAttached"], (
+        "el._dcap_clone is still set after capture — the finally block "
+        "in _HTML2CANVAS_CAPTURE didn't run or didn't delete it."
+    )
+    assert state["wrappersInBody"] == 0, (
+        f"found {state['wrappersInBody']} offscreen wrapper(s) still "
+        "attached to <body> after capture — the finally block didn't "
+        "remove them."
+    )

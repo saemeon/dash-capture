@@ -17,6 +17,7 @@ from datetime import date
 from typing import Literal
 
 import dash
+import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -52,11 +53,207 @@ cpi = rng.uniform(0.0, 4.0, len(years)).tolist()
 
 df = pd.DataFrame(
     {
-        "Country": ["Switzerland", "Germany", "France", "Italy", "Austria"],
-        "GDP per capita ($)": [93_720, 51_380, 44_850, 35_550, 53_640],
-        "Life expectancy": [83.4, 80.9, 82.5, 82.9, 81.6],
+        "Country": [
+            "Switzerland",
+            "Germany",
+            "France",
+            "Italy",
+            "Austria",
+            "Netherlands",
+            "Belgium",
+            "Sweden",
+            "Norway",
+            "Denmark",
+            "Finland",
+            "Ireland",
+            "Spain",
+            "Portugal",
+            "Greece",
+            "Poland",
+            "Czechia",
+            "Hungary",
+            "United Kingdom",
+            "Luxembourg",
+            "United States",
+            "Canada",
+            "Mexico",
+            "Brazil",
+            "Argentina",
+            "Chile",
+            "Colombia",
+            "Peru",
+            "Uruguay",
+            "Costa Rica",
+            "Japan",
+            "South Korea",
+            "China",
+            "India",
+            "Indonesia",
+            "Thailand",
+            "Vietnam",
+            "Malaysia",
+            "Singapore",
+            "Philippines",
+            "Australia",
+            "New Zealand",
+            "South Africa",
+            "Egypt",
+            "Morocco",
+            "Nigeria",
+            "Kenya",
+            "Ethiopia",
+            "Ghana",
+            "Tunisia",
+            "Turkey",
+            "Israel",
+            "Saudi Arabia",
+            "United Arab Emirates",
+            "Qatar",
+            "Russia",
+            "Ukraine",
+            "Romania",
+            "Bulgaria",
+            "Croatia",
+        ],
+        "GDP per capita ($)": [
+            93_720,
+            51_380,
+            44_850,
+            35_550,
+            53_640,
+            61_770,
+            53_470,
+            58_530,
+            87_960,
+            68_830,
+            54_510,
+            103_500,
+            32_680,
+            27_300,
+            22_990,
+            22_110,
+            30_430,
+            22_150,
+            49_460,
+            132_370,
+            81_630,
+            53_370,
+            13_790,
+            10_410,
+            13_650,
+            17_250,
+            6_980,
+            7_790,
+            21_650,
+            13_350,
+            33_950,
+            33_120,
+            12_720,
+            2_730,
+            4_980,
+            7_300,
+            4_320,
+            12_460,
+            84_730,
+            3_860,
+            65_100,
+            48_420,
+            6_770,
+            4_300,
+            3_670,
+            2_180,
+            2_180,
+            1_020,
+            2_450,
+            4_080,
+            13_380,
+            55_530,
+            32_590,
+            53_710,
+            84_510,
+            14_400,
+            5_180,
+            18_410,
+            13_770,
+            21_310,
+        ],
+        "Life expectancy": [
+            83.4,
+            80.9,
+            82.5,
+            82.9,
+            81.6,
+            81.7,
+            81.9,
+            82.4,
+            83.0,
+            81.4,
+            81.9,
+            82.6,
+            83.2,
+            81.1,
+            80.1,
+            77.5,
+            79.1,
+            76.4,
+            80.7,
+            82.7,
+            77.5,
+            82.6,
+            75.1,
+            75.9,
+            76.6,
+            80.2,
+            77.1,
+            76.7,
+            77.9,
+            80.3,
+            84.3,
+            83.4,
+            78.2,
+            70.8,
+            67.6,
+            76.9,
+            75.4,
+            76.0,
+            83.7,
+            71.2,
+            83.3,
+            82.3,
+            65.3,
+            70.2,
+            74.0,
+            53.6,
+            66.7,
+            65.2,
+            63.8,
+            76.3,
+            76.0,
+            82.7,
+            76.9,
+            78.7,
+            79.3,
+            73.2,
+            71.6,
+            75.6,
+            75.1,
+            78.3,
+        ],
     }
 )
+
+# style for our default data tables
+# uses a global because dash_table.DataTable doesn't accept custom css class via className param
+DEFAULT_TABLE_STYLE = {
+    "filter_action": "native",  # enable filter
+    "filter_options": {"case": "insensitive"},  # case-insensivie text filtering
+    "sort_action": "native",  # enable sort
+    "style_as_list_view": True,  # no borders between cols
+    "style_cell": {"textAlign": "center", "whiteSpace": "pre-line"},
+    "style_data": {"border": "1px solid grey"},
+    "style_header": {"border": "1px solid grey"},
+    "style_table": {"overflowX": "auto"},
+}
 
 # ── Figures ───────────────────────────────────────────────────────────────────
 
@@ -251,6 +448,21 @@ def renderer_stripped(
     _target.write(_snapshot_img())
 
 
+def renderer_table_sized(
+    _target,
+    _snapshot_img,
+    width: int = 900,
+    height: int = 500,
+    capture_width: int = 0,
+    capture_height: int = 0,
+):
+    _target.write(_snapshot_img())
+
+
+def resolver_table_sized(width, height, **_):
+    return {"capture_width": width, "capture_height": height}
+
+
 # ── Section 1: Plotly modebar ─────────────────────────────────────────────────
 
 modebar_graph_plain = make_bar_line("GDP growth and CPI", "chart-plain")
@@ -265,25 +477,27 @@ modebar_wizard_custom = capture_graph(
 
 # ── Section 2: Hover toolbar (with_capture) ───────────────────────────────────
 
-hover_table = with_capture(
-    dash_table.DataTable(
-        id="poc-table",
-        columns=[{"name": c, "id": c} for c in df.columns],
-        data=df.to_dict("records"),
-        style_table={"width": "560px"},
-        style_header={
-            "backgroundColor": "#2c3e50",
-            "color": "white",
-            "fontWeight": "bold",
-        },
-        style_cell={"padding": "8px", "fontFamily": "system-ui, sans-serif"},
-        style_data_conditional=[
-            {"if": {"row_index": "odd"}, "backgroundColor": "#f8f9fa"}
-        ],
-    ),
-    download_arrow,
-    tooltip="Export table",
-    filename="table.png",
+hover_table = dbc.Card(
+    children=[
+        dbc.CardHeader("Country indicators"),
+        dbc.CardBody(
+            className="snb-eds-table",
+            children=with_capture(
+                dash_table.DataTable(
+                    id="poc-table",
+                    columns=[{"name": c, "id": c} for c in df.columns],
+                    data=df.to_dict("records"),
+                    page_size=10,
+                    **DEFAULT_TABLE_STYLE,
+                ),
+                download_arrow,
+                tooltip="Export table",
+                filename="table-custom.png",
+                renderer=renderer_table_sized,
+                capture_resolver=resolver_table_sized,
+            ),
+        ),
+    ],
 )
 
 hover_text_div = with_capture(
@@ -419,6 +633,33 @@ explicit_wizard = capture_graph(
 # ── App layout ────────────────────────────────────────────────────────────────
 
 app = dash.Dash(__name__)
+
+app.index_string = """<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+        /* Text + border color */
+        .snb-eds-table .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td,
+        .snb-eds-table .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner th {
+            background-color: var(--bs-body-bg);
+            border-bottom: var(--bs-border-width) solid !important;
+            border-top: var(--bs-border-width) solid !important;
+        }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>"""
 
 app.layout = html.Div(
     style={
