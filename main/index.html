@@ -2096,15 +2096,20 @@ Advanced — defaults are all <code>False</code>.</p>
     <div class="doc doc-contents first">
 
         <p><code>html2canvas</code> strategy for capturing arbitrary DOM elements.</p>
-<p>When the renderer declares <code>capture_width</code> and/or <code>capture_height</code>
-parameters, the strategy emits a live-resize preprocess: the element
-is temporarily resized to the target dimensions, the browser is given
-a few <code>requestAnimationFrame</code> ticks to settle (so <code>ResizeObserver</code>
-listeners and any JS-driven layout — dygraphs redraws,
-<code>dash_table.DataTable</code> column-width recompute, etc. — can react),
-html2canvas snapshots, and original inline styles are restored in a
-<code>finally</code> block. This mirrors how :func:<code>plotly_strategy</code> already
-consumes <code>capture_width</code>/<code>capture_height</code>.</p>
+<p>The strategy always emits an offscreen-clone preprocess: the target
+element is deep-cloned into an off-screen wrapper (with its ancestor
+class/id chain reconstructed so descendant-selector CSS still
+matches), and html2canvas captures the clone rather than the live
+element. This avoids html2canvas's whole-document clone walk
+operating on the live page — a single call against the live element
+on a 25k-node Dash app takes ~45s; against the offscreen clone it's
+sub-second.</p>
+<p>When the renderer declares <code>capture_width</code> and/or <code>capture_height</code>,
+those dimensions are applied to the <em>clone's</em> inline style — the
+live page never reflows. The browser is given <code>settle_frames</code>
+<code>requestAnimationFrame</code> ticks so <code>ResizeObserver</code> listeners and
+JS-driven layout (DataTable column-width recompute, dygraphs redraw,
+etc.) can react on the clone before snapshot.</p>
 
 
 <table>
@@ -2142,7 +2147,7 @@ consumes <code>capture_width</code>/<code>capture_height</code>.</p>
             <td class="doc-param-details">
               <div class="doc-md-description">
                 <p>Number of <code>requestAnimationFrame</code> ticks to await between
-resizing the element and capturing. Default <code>2</code> covers most
+inserting the clone and capturing. Default <code>2</code> covers most
 ResizeObserver-driven components; bump higher for components
 that animate layout changes.</p>
               </div>
@@ -2188,18 +2193,11 @@ that animate layout changes.</p>
 
 <details class="note" open>
   <summary>Notes</summary>
-  <p>Live-resize is visible to the user as a brief flicker — the chart
-or layout reflows in place before the screenshot is taken, then
-snaps back. This is intentional: any "hide during capture"
-mechanism (<code>visibility: hidden</code>, <code>opacity: 0</code>) cascades to
-descendants, and html2canvas skips hidden elements, which would
-silently drop all text from the captured image. The flicker is
-the price of correctness.</p>
-<p>Live-resize also triggers any user-installed <code>ResizeObserver</code>
-callbacks and may flush Dash resize-driven callbacks during the
-capture window. For deliberate "Capture" button clicks this is
-almost always benign, but be aware if your app has expensive
-resize handlers.</p>
+  <p>Ancestor-chain reconstruction preserves descendant-selector CSS
+(<code>.parent .child td { … }</code>) but not sibling- or positional-
+selectors (<code>:nth-child</code>, <code>+</code>, <code>~</code>). These are rare for app
+styling; if your component depends on them, inline the relevant
+styles or apply them via class.</p>
 </details>
 
     </div>
@@ -2443,6 +2441,17 @@ when wiring the strategy.</p>
     </table>
 
 
+<details class="note" open>
+  <summary>Notes</summary>
+  <p>Unlike :func:<code>html2canvas_strategy</code>, this strategy operates on the
+<em>live</em> element rather than an offscreen clone. Cloning would produce
+blank <code>&lt;canvas&gt;</code> elements (rendered pixel buffers don't survive
+<code>cloneNode</code>), and running the overlay html2canvas pass against a
+clone while compositing live-canvas bitmaps risks coordinate
+misalignment. The trade-off: the overlay pass still pays
+html2canvas's whole-document clone cost on large pages.</p>
+</details>
+
     </div>
 
 </div><h3 id="build_reflow_preprocess">build_reflow_preprocess<a class="headerlink" href="#build_reflow_preprocess" title="Permanent link">&para;</a></h3>
@@ -2456,10 +2465,11 @@ when wiring the strategy.</p>
     <div class="doc doc-contents first">
 
         <p>Build JS preprocess that live-resizes the element to opts.width/height.</p>
-<p>Public helper for custom capture strategies. Used by
-:func:<code>html2canvas_strategy</code> and :func:<code>multi_canvas_strategy</code>, and
-intended for third-party strategies that want the same target-size
-behaviour without duplicating the JS.</p>
+<p>Public helper for custom capture strategies that need to mutate the
+<em>live</em> DOM element before capture (e.g. canvas-based strategies where
+cloning the element would lose the rendered pixel buffer). For
+DOM-snapshot strategies — see :func:<code>build_offscreen_clone_preprocess</code>,
+which avoids touching the live page entirely.</p>
 <p>Saves original inline <code>width</code>/<code>height</code> on <code>el._dcap_saved</code> so
 the capture JS's <code>finally</code> block can restore them. Settles for
 <code>settle_frames</code> rAF ticks so ResizeObservers (dygraphs, ECharts,
