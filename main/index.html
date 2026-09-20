@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="assets/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
@@ -1179,7 +1179,7 @@ only the graph's own updates, use Dash's <code>target_components=</code>
 parameter (Dash 2.14+)::</p>
 <div class="highlight"><pre><span></span><code>dcc.Loading(
     graph,
-    target_components={&quot;my-graph&quot;: &quot;figure&quot;},
+    target_components={"my-graph": "figure"},
 )
 </code></pre></div>
 <p>This limits the spinner to updates of <code>graph.figure</code> specifically,
@@ -1189,19 +1189,19 @@ ignoring the wizard's internal callbacks.</p>
 <p><span class="doc-section-title">Examples:</span></p>
     <p>Default — passthrough, no fields, just Generate + Download::</p>
 <div class="highlight"><pre><span></span><code>&gt;&gt;&gt; from dash_capture import capture_graph
-&gt;&gt;&gt; wizard = capture_graph(&quot;my-graph&quot;, trigger=&quot;Export&quot;)
+&gt;&gt;&gt; wizard = capture_graph("my-graph", trigger="Export")
 </code></pre></div>
 <p>With strip patches via the strategy::</p>
 <div class="highlight"><pre><span></span><code>&gt;&gt;&gt; from dash_capture import capture_graph, plotly_strategy
 &gt;&gt;&gt; wizard = capture_graph(
-...     &quot;my-graph&quot;,
+...     "my-graph",
 ...     strategy=plotly_strategy(strip_title=True, strip_legend=True),
 ... )
 </code></pre></div>
 <p>With a built-in PIL renderer::</p>
 <div class="highlight"><pre><span></span><code>&gt;&gt;&gt; from dash_capture import capture_graph
 &gt;&gt;&gt; from dash_capture.pil import titled
-&gt;&gt;&gt; wizard = capture_graph(&quot;my-graph&quot;, renderer=titled)
+&gt;&gt;&gt; wizard = capture_graph("my-graph", renderer=titled)
 </code></pre></div>
 <p>With a custom renderer::</p>
 <div class="highlight"><pre><span></span><code>&gt;&gt;&gt; from dash_capture import capture_graph
@@ -1209,7 +1209,7 @@ ignoring the wizard's internal callbacks.</p>
 &gt;&gt;&gt; def my_renderer(_target, _snapshot_img, dpi: int = 150):
 ...     _target.write(_snapshot_img())
 &gt;&gt;&gt;
-&gt;&gt;&gt; wizard = capture_graph(&quot;my-graph&quot;, renderer=my_renderer)
+&gt;&gt;&gt; wizard = capture_graph("my-graph", renderer=my_renderer)
 </code></pre></div>
 
 
@@ -1564,12 +1564,12 @@ the interaction with <code>dcc.Loading</code> and the
 <p><span class="doc-section-title">Examples:</span></p>
     <p>Default — capture a DataTable to PNG::</p>
 <div class="highlight"><pre><span></span><code>&gt;&gt;&gt; from dash_capture import capture_element
-&gt;&gt;&gt; wizard = capture_element(&quot;my-data-table&quot;, trigger=&quot;Screenshot&quot;)
+&gt;&gt;&gt; wizard = capture_element("my-data-table", trigger="Screenshot")
 </code></pre></div>
 <p>With a built-in PIL renderer::</p>
 <div class="highlight"><pre><span></span><code>&gt;&gt;&gt; from dash_capture import capture_element
 &gt;&gt;&gt; from dash_capture.pil import titled
-&gt;&gt;&gt; wizard = capture_element(&quot;my-data-table&quot;, renderer=titled)
+&gt;&gt;&gt; wizard = capture_element("my-data-table", renderer=titled)
 </code></pre></div>
 
 
@@ -2647,10 +2647,10 @@ a <code>CaptureStrategy</code>. Signature: <code>(el, fmt, hideSelectors, debug)
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash</span><span class="w"> </span><span class="kn">import</span> <span class="n">dcc</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">FromPlotly</span><span class="p">,</span> <span class="n">capture_graph</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">graph</span> <span class="o">=</span> <span class="n">dcc</span><span class="o">.</span><span class="n">Graph</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;my-graph&quot;</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">graph</span> <span class="o">=</span> <span class="n">dcc</span><span class="o">.</span><span class="n">Graph</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">"my-graph"</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">capture_graph</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">graph</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">field_specs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="n">FromPlotly</span><span class="p">(</span><span class="s2">&quot;layout.title.text&quot;</span><span class="p">,</span> <span class="n">graph</span><span class="p">)},</span>
+<span class="gp">... </span>    <span class="n">field_specs</span><span class="o">=</span><span class="p">{</span><span class="s2">"title"</span><span class="p">:</span> <span class="n">FromPlotly</span><span class="p">(</span><span class="s2">"layout.title.text"</span><span class="p">,</span> <span class="n">graph</span><span class="p">)},</span>
 <span class="gp">... </span><span class="p">)</span>
 </code></pre></div>
 
@@ -2810,7 +2810,7 @@ a <code>CaptureStrategy</code>. Signature: <code>(el, fmt, hideSelectors, debug)
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">SvgIcon</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;M500 0 L1000 1000 L0 1000 Z&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">"M500 0 L1000 1000 L0 1000 Z"</span><span class="p">)</span>
 </code></pre></div>
 
 
@@ -2971,11 +2971,11 @@ Pass <code>"block"</code> for full-width elements.</p>
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">with_hover_toolbar</span><span class="p">,</span> <span class="n">icon_button</span><span class="p">,</span> <span class="n">SvgIcon</span><span class="p">,</span> <span class="n">capture_element</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;M350 100 H650 V450 ...&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">btn</span> <span class="o">=</span> <span class="n">icon_button</span><span class="p">(</span><span class="n">icon</span><span class="p">,</span> <span class="s2">&quot;cap-btn&quot;</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="s2">&quot;Export&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span> <span class="o">=</span> <span class="n">dash_table</span><span class="o">.</span><span class="n">DataTable</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">"M350 100 H650 V450 ..."</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">btn</span> <span class="o">=</span> <span class="n">icon_button</span><span class="p">(</span><span class="n">icon</span><span class="p">,</span> <span class="s2">"cap-btn"</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="s2">"Export"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">table</span> <span class="o">=</span> <span class="n">dash_table</span><span class="o">.</span><span class="n">DataTable</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">"my-table"</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">wrapped</span> <span class="o">=</span> <span class="n">with_hover_toolbar</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="p">[</span><span class="n">btn</span><span class="p">])</span>   <span class="c1"># type: DataTable</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">wizard</span> <span class="o">=</span> <span class="n">capture_element</span><span class="p">(</span><span class="s2">&quot;my-table&quot;</span><span class="p">,</span> <span class="n">trigger</span><span class="o">=</span><span class="n">btn</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wizard</span> <span class="o">=</span> <span class="n">capture_element</span><span class="p">(</span><span class="s2">"my-table"</span><span class="p">,</span> <span class="n">trigger</span><span class="o">=</span><span class="n">btn</span><span class="p">)</span>
 </code></pre></div>
 
 
@@ -3083,8 +3083,8 @@ version.</p>
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dash_capture</span><span class="w"> </span><span class="kn">import</span> <span class="n">SvgIcon</span><span class="p">,</span> <span class="n">icon_button</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;M500 0 L1000 1000 L0 1000 Z&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">btn</span> <span class="o">=</span> <span class="n">icon_button</span><span class="p">(</span><span class="n">icon</span><span class="p">,</span> <span class="s2">&quot;my-btn&quot;</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="s2">&quot;Export&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">icon</span> <span class="o">=</span> <span class="n">SvgIcon</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">"M500 0 L1000 1000 L0 1000 Z"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">btn</span> <span class="o">=</span> <span class="n">icon_button</span><span class="p">(</span><span class="n">icon</span><span class="p">,</span> <span class="s2">"my-btn"</span><span class="p">,</span> <span class="n">tooltip</span><span class="o">=</span><span class="s2">"Export"</span><span class="p">)</span>
 </code></pre></div>
 
 
@@ -3171,7 +3171,7 @@ version.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["content.width.wide", "content.code.annotate", "content.code.copy", "content.tabs.link", "navigation.top", "navigation.tracking", "content.action.edit", "search.highlight", "search.suggest"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="assets/javascripts/bundle.d7400e89.min.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       
